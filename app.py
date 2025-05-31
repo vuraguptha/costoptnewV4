@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly as px
+import plotly.express as px
 # import openai
 import os
 import json
@@ -1296,7 +1296,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             "Category": ["Without Package"] + list(results["results"].keys()),
             "Cost (AED)": [no_pkg_cost] + [results["results"][pkg]["total_cost"] for pkg in results["results"]],
         })
-        fig_cost = px.express.bar(df_cost, x="Category", y="Cost (AED)", title="💰 Total Cost by Option",
+        fig_cost = px.bar(df_cost, x="Category", y="Cost (AED)", title="💰 Total Cost by Option",
                           color="Category", text_auto=".2f")
         st.plotly_chart(fig_cost, use_container_width=True)
 
@@ -1305,7 +1305,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             "Package": list(results["results"].keys()),
             "Savings (AED)": [results["results"][pkg]["savings"] for pkg in results["results"]],
         })
-        fig_savings = px.express.bar(df_savings, x="Package", y="Savings (AED)", title="💸 Savings by Package",
+        fig_savings = px.bar(df_savings, x="Package", y="Savings (AED)", title="💸 Savings by Package",
                              color="Package", text_auto=".2f")
         st.plotly_chart(fig_savings, use_container_width=True)
 
