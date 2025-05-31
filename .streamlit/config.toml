@@ -1,0 +1,20 @@
+# .streamlit/config.toml
+
+[theme]
+# ADCB's prominent red for primary actions and highlights
+primaryColor="#e4002b"
+
+# A very light grey for the main app background to keep it clean and bright
+backgroundColor="#f8f9fa"
+
+# A slightly darker, still light grey for elements like the sidebar,
+# chat messages, and expander backgrounds
+secondaryBackgroundColor="#e9ecef"
+
+# A dark grey (almost black) for text to ensure good readability
+# against the light backgrounds
+textColor="#212529"
+
+# You can also specify a font if you have a preference,
+# otherwise Streamlit's default will be used.
+font="sans serif"
