@@ -4,7 +4,7 @@ import plotly as px
 # import openai
 import os
 import json
-from fpdf import FPDF
+# from fpdf import FPDF
 from dotenv import load_dotenv
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
