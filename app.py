@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-# import openai
+import openai
 import os
 import json
-# from fpdf import FPDF
+from fpdf import FPDF
 from dotenv import load_dotenv
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
@@ -12,12 +12,25 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import time
+from gtts import gTTS # Import gTTS
 
 
-# load_dotenv()
+load_dotenv()
 
 # Set OpenAI API Key
-# openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# -------------------- TTS HELPER FUNCTION --------------------
+def play_text_as_speech(text_to_speak, lang='en'):
+    """Generates speech from text and plays it using st.audio."""
+    try:
+        tts = gTTS(text=text_to_speak, lang=lang, slow=False)
+        audio_fp = BytesIO()
+        tts.write_to_fp(audio_fp)
+        audio_fp.seek(0) # Important: move to the beginning of the BytesIO stream
+        st.audio(audio_fp, format='audio/mp3', autoplay=True)
+    except Exception as e:
+        st.warning(f"Could not play speech: {e}")
 
 # -------------------- UI CONFIG & APP NAMING --------------------
 st.set_page_config(page_title="Takhfīd Genie", layout="wide", page_icon="🧞‍♂️") 
@@ -211,35 +224,35 @@ def suggest_best_package(transactions, transaction_costs, fx_amount, fx_directio
     return best_pkg, max_savings, results, no_pkg_cost
 
 
-# def parse_input_with_ai(user_input):
-#     system_prompt = (
-#         "You are a financial assistant. Extract transaction counts and unit costs from text. "
-#         "Reply in this exact JSON format: "
-#         '{"international_count": int, "international_cost": float, '
-#         '"domestic_count": int, "domestic_cost": float, '
-#         '"cheque_count": int, "cheque_cost": float, '
-#         '"wps_enabled": true/false, "wps_cost": float, '
-#         '"fx_amount": float, "fx_direction": "Buy USD"/"Sell USD", "fx_rate": float}'
-#     )
-#     try:
-#         response = openai.ChatCompletion.create(
-#             model="gpt-3.5-turbo",
-#             messages=[
-#                 {"role": "system", "content": system_prompt},
-#                 {"role": "user", "content": user_input}
-#             ],
-#             temperature=0.2,
-#         )
-#         json_str = response.choices[0].message.content.strip()
-#         parsed = json.loads(json_str)
+def parse_input_with_ai(user_input):
+    system_prompt = (
+        "You are a financial assistant. Extract transaction counts and unit costs from text. "
+        "Reply in this exact JSON format: "
+        '{"international_count": int, "international_cost": float, '
+        '"domestic_count": int, "domestic_cost": float, '
+        '"cheque_count": int, "cheque_cost": float, '
+        '"wps_enabled": true/false, "wps_cost": float, '
+        '"fx_amount": float, "fx_direction": "Buy USD"/"Sell USD", "fx_rate": float}'
+    )
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0.2,
+        )
+        json_str = response.choices[0].message.content.strip()
+        parsed = json.loads(json_str)
 
-#         # Validate FX direction
-#         if parsed["fx_direction"] not in ["Buy USD", "Sell USD"]:
-#             parsed["fx_direction"] = "Buy USD"
-#         return parsed
-#     except Exception as e:
-#         st.error(f"Error parsing AI response: {e}")
-#         return None
+        # Validate FX direction
+        if parsed["fx_direction"] not in ["Buy USD", "Sell USD"]:
+            parsed["fx_direction"] = "Buy USD"
+        return parsed
+    except Exception as e:
+        st.error(f"Error parsing AI response: {e}")
+        return None
 
 
 def export_to_csv(results, user_data, best, savings, no_pkg_cost):
@@ -593,9 +606,12 @@ def process_user_response(response):
     stage = st.session_state.chat_stage
     data = st.session_state.transaction_data
     
-    # Initialize the chat interface
+    # Text to be spoken for the current stage
+    text_for_speech = ""
+
     if stage == "welcome":
-        st.write("👋 Hi! I'm your AI Banking Assistant. Do you make domestic transfers?")
+        text_for_speech = "Hi! I'm your AI Banking Assistant. Do you make domestic transfers?"
+        st.write(f"👋 {text_for_speech}")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_domestic"):
@@ -609,7 +625,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "domestic_count":
-        st.write("Enter number of domestic transfers:")
+        text_for_speech = "Enter number of domestic transfers:"
+        st.write(text_for_speech)
         count = st.number_input("Count", min_value=0, step=1, key="domestic_count")
         if st.button("Continue", key="submit_domestic_count"):
             data["domestic"]["count"] = count
@@ -617,7 +634,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "domestic_cost":
-        st.write("Enter cost per domestic transfer (in AED):")
+        text_for_speech = "Enter cost per domestic transfer, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("Cost", min_value=0.0, step=0.1, key="domestic_cost")
         if st.button("Continue", key="submit_domestic_cost"):
             data["domestic"]["cost"] = cost
@@ -625,7 +643,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "international_ask":
-        st.write("Do you make international transfers?")
+        text_for_speech = "Do you make international transfers?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_international"):
@@ -639,7 +658,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "international_count":
-        st.write("Enter number of international transfers:")
+        text_for_speech = "Enter number of international transfers:"
+        st.write(text_for_speech)
         count = st.number_input("Count", min_value=0, step=1, key="international_count")
         if st.button("Continue", key="submit_international_count"):
             data["international"]["count"] = count
@@ -647,7 +667,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "international_cost":
-        st.write("Enter cost per international transfer (in AED):")
+        text_for_speech = "Enter cost per international transfer, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("Cost", min_value=0.0, step=0.1, key="international_cost")
         if st.button("Continue", key="submit_international_cost"):
             data["international"]["cost"] = cost
@@ -655,7 +676,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "cheque_ask":
-        st.write("Do you process cheques?")
+        text_for_speech = "Do you process cheques?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_cheque"):
@@ -669,7 +691,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "cheque_count":
-        st.write("Enter number of cheques:")
+        text_for_speech = "Enter number of cheques:"
+        st.write(text_for_speech)
         count = st.number_input("Count", min_value=0, step=1, key="cheque_count")
         if st.button("Continue", key="submit_cheque_count"):
             data["cheque"]["count"] = count
@@ -677,7 +700,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "cheque_cost":
-        st.write("Enter cost per cheque (in AED):")
+        text_for_speech = "Enter cost per cheque, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("Cost", min_value=0.0, step=0.1, key="cheque_cost")
         if st.button("Continue", key="submit_cheque_cost"):
             data["cheque"]["cost"] = cost
@@ -685,7 +709,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "fx_ask":
-        st.write("Do you need foreign exchange (FX)?")
+        text_for_speech = "Do you need foreign exchange?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_fx"):
@@ -699,7 +724,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "fx_amount":
-        st.write("Enter FX amount in USD:")
+        text_for_speech = "Enter FX amount in USD:"
+        st.write(text_for_speech)
         amount = st.number_input("Amount", min_value=0.0, step=100.0, key="fx_amount")
         if st.button("Continue", key="submit_fx_amount"):
             data["fx"]["amount"] = amount
@@ -707,7 +733,8 @@ def process_user_response(response):
             st.rerun()
             
     elif stage == "fx_direction":
-        st.write("Are you buying or selling USD?")
+        text_for_speech = "Are you buying or selling USD?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Buy USD", key="buy_usd"):
@@ -723,7 +750,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "wps_ask":
-        st.write("Do you use WPS/CST (Wages Protection System/Corporate Self Transfer)?")
+        text_for_speech = "Do you use WPS or CST (Wages Protection System or Corporate Self Transfer)?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_wps"):
@@ -737,7 +765,8 @@ def process_user_response(response):
                 st.rerun()
                 
     elif stage == "wps_cost":
-        st.write("Enter monthly WPS/CST cost (in AED):")
+        text_for_speech = "Enter monthly WPS or CST cost, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("WPS/CST Cost", min_value=0.0, step=10.0, key="wps_cost_ai")
         if st.button("Continue", key="submit_wps_cost_ai"):
             data["wps"]["enabled"] = True
@@ -747,7 +776,8 @@ def process_user_response(response):
 
     # New stages for PDC
     elif stage == "pdc_ask":
-        st.write("Do you process Post-Dated Cheques (PDCs)?")
+        text_for_speech = "Do you process Post-Dated Cheques (PDCs)?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_pdc"):
@@ -761,7 +791,8 @@ def process_user_response(response):
                 st.rerun()
 
     elif stage == "pdc_count":
-        st.write("Enter number of PDCs processed monthly:")
+        text_for_speech = "Enter number of PDCs processed monthly:"
+        st.write(text_for_speech)
         count = st.number_input("PDC Count", min_value=0, step=1, key="pdc_count_ai")
         if st.button("Continue", key="submit_pdc_count_ai"):
             data["pdc"]["count"] = count
@@ -769,7 +800,8 @@ def process_user_response(response):
             st.rerun()
 
     elif stage == "pdc_cost":
-        st.write("Enter cost per PDC (in AED):")
+        text_for_speech = "Enter cost per PDC, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("Cost per PDC", min_value=0.0, step=0.1, key="pdc_cost_ai_item")
         if st.button("Continue", key="submit_pdc_cost_ai_item"):
             data["pdc"]["cost"] = cost
@@ -778,7 +810,8 @@ def process_user_response(response):
 
     # New stages for Inward FCY Remittance
     elif stage == "inward_fcy_ask":
-        st.write("Do you receive Inward FCY Remittances?")
+        text_for_speech = "Do you receive Inward FCY Remittances?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_inward_fcy"):
@@ -792,7 +825,8 @@ def process_user_response(response):
                 st.rerun()
     
     elif stage == "inward_fcy_count":
-        st.write("Enter number of Inward FCY Remittances monthly:")
+        text_for_speech = "Enter number of Inward FCY Remittances monthly:"
+        st.write(text_for_speech)
         count = st.number_input("Inward FCY Remittance Count", min_value=0, step=1, key="inward_fcy_count_ai")
         if st.button("Continue", key="submit_inward_fcy_count_ai"):
             data["inward_fcy_remittance"]["count"] = count
@@ -800,7 +834,8 @@ def process_user_response(response):
             st.rerun()
 
     elif stage == "inward_fcy_cost":
-        st.write("Enter cost per Inward FCY Remittance (in AED):")
+        text_for_speech = "Enter cost per Inward FCY Remittance, in AED:"
+        st.write(text_for_speech)
         cost = st.number_input("Cost per Inward FCY Remittance", min_value=0.0, step=0.1, key="inward_fcy_cost_ai_item")
         if st.button("Continue", key="submit_inward_fcy_cost_ai_item"):
             data["inward_fcy_remittance"]["cost"] = cost
@@ -809,7 +844,8 @@ def process_user_response(response):
 
     # New stage for Other Costs
     elif stage == "other_costs_ask":
-        st.write("Do you have any other monthly costs (e.g., cheque submission, courier, labour, miscellaneous)?")
+        text_for_speech = "Do you have any other monthly costs such as cheque submission, courier, or miscellaneous fees?"
+        st.write(text_for_speech)
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Yes", key="yes_other_costs"):
@@ -823,7 +859,8 @@ def process_user_response(response):
                 st.rerun()
 
     elif stage == "other_costs_input":
-        st.write("Enter total of these other monthly costs (in AED):")
+        text_for_speech = "Enter total of these other monthly costs, in AED:"
+        st.write(text_for_speech)
         other_total_cost = st.number_input("Total Other Costs", min_value=0.0, step=1.0, key="other_costs_input_ai")
         if st.button("View Analysis", key="submit_other_costs_ai"):
             data["other_costs_input"] = other_total_cost
@@ -832,7 +869,8 @@ def process_user_response(response):
             st.rerun()
 
     elif stage == "analysis":
-        st.success("Analysis Complete! View the results in the main panel.")
+        text_for_speech = "Analysis Complete! View the results in the main panel."
+        st.success(text_for_speech)
         # Optionally, add a button here to start a new AI chat analysis
         if st.button("Start New AI Analysis", key="new_ai_analysis_from_success"):
             init_chat_state() # Reset AI chat state
@@ -843,6 +881,7 @@ def process_user_response(response):
             st.rerun()
 
     elif stage == "no_savings_found":
+        text_for_speech = "Based on your inputs, no package offers savings over not using one. You can adjust your inputs or try the Manual mode."
         st.warning("Based on your inputs, no package offers savings over not using one.")
         st.info("You can adjust your inputs or try the Manual mode.")
         if st.button("Try Again with AI", key="try_again_ai"):
@@ -853,6 +892,10 @@ def process_user_response(response):
                 del st.session_state.analysis_results
             st.rerun()
     
+    # Play the speech if text_for_speech is set
+    if text_for_speech:
+        play_text_as_speech(text_for_speech)
+
     # Show current progress
     st.markdown("---")
     st.markdown("### Current Information:")
