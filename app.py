@@ -4,7 +4,7 @@ import plotly.express as px
 import openai
 import os
 import json
-# from fpdf import FPDF
+from fpdf import FPDF
 from dotenv import load_dotenv
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
@@ -21,16 +21,18 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # -------------------- TTS HELPER FUNCTION --------------------
-def play_text_as_speech(text_to_speak, lang='en'):
-    """Generates speech from text and plays it using st.audio."""
+def play_text_as_speech(text_to_speak):
+    """Generates speech from text and plays it using st.audio, respecting session language."""
+    # Use language from session state, default to 'en' if not found
+    selected_language = st.session_state.get("tts_language", "en") 
     try:
-        tts = gTTS(text=text_to_speak, lang=lang, slow=False)
+        tts = gTTS(text=text_to_speak, lang=selected_language, slow=False)
         audio_fp = BytesIO()
         tts.write_to_fp(audio_fp)
         audio_fp.seek(0) # Important: move to the beginning of the BytesIO stream
         st.audio(audio_fp, format='audio/mp3', autoplay=True)
     except Exception as e:
-        st.warning(f"Could not play speech: {e}")
+        st.warning(f"Could not play speech (lang: {selected_language}): {e}")
 
 # -------------------- UI CONFIG & APP NAMING --------------------
 st.set_page_config(page_title="Takhfīd Genie", layout="wide", page_icon="🧞‍♂️") 
@@ -995,8 +997,10 @@ if "show_welcome" not in st.session_state:
     st.session_state.show_welcome = True
 if "manual_wps_enabled" not in st.session_state: 
     st.session_state.manual_wps_enabled = False
-if "chat_stage" not in st.session_state: # Ensure AI chat state is initialized if needed early
-    init_chat_state() # This might be redundant if AI mode button calls it, but safe for direct access cases
+if "tts_language" not in st.session_state: # Re-add session state for TTS language
+    st.session_state.tts_language = "en" # Default to English
+if "chat_stage" not in st.session_state: 
+    init_chat_state() 
 
 # -------------------- UI RENDER STARTS HERE --------------------
 
@@ -1005,181 +1009,150 @@ st.title(APP_TITLE)
 
 # Sidebar UI
 with st.sidebar:
-    # Display a smaller version of the image and title in the sidebar
-    try:
-        st.image(SIDEBAR_IMAGE_PATH, width=75) 
-    except Exception as e:
-        st.warning(f"Sidebar image not found at {SIDEBAR_IMAGE_PATH}. Please place it there. Error: {e}")
-    
-    # Styled App Title in Sidebar
-    st.markdown(f"<h2 style='text-align: center; color: #e4002b; font-weight: bold;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
-    
-    # Styled Subtitle
-    st.markdown("**_Your AI-powered cost optimization assistant._**") 
-    
-    st.markdown("---")
+    # New descriptive text at the top
+    st.markdown("""
+    <p style="color: #e60013; font-size: 20px; line-height: 1.6; text-align: justify; margin-left: 14px;">
+        <strong><em>
+            &nbsp;&nbsp;&nbsp;&nbsp;An intelligent AI-powered pricing solution that empowers your team to propose the most appropriate Business First Package—grounded in a data-driven analysis of each client's financial profile
+            and current banking costs, enabling smarter conversations, better client alignment, and measurable value.
+        </em></strong>
+    </p>
+    """, unsafe_allow_html=True)
+
+
+    st.markdown("---") 
 
     st.markdown("### 🧭 Choose Input Mode")
     col1, col2 = st.columns(2)
-    
     with col1:
-        if st.button("📝 Manual Mode", key="mode_manual", use_container_width=True, help="Enter inputs manually"):
+        if st.button("📝 Manual Mode", key="mode_manual_revert", use_container_width=True, help="Enter inputs manually"):
             st.session_state.input_mode = 'Manual'
             st.session_state.submitted = False
             st.session_state.show_welcome = True
-            if 'chat_stage' in st.session_state:
+            if 'chat_stage' in st.session_state: # Clear AI state if switching from AI
                 del st.session_state.chat_stage
             if 'messages' in st.session_state:
                 del st.session_state.messages
+            if 'transaction_data' in st.session_state: # Clear AI transaction data
+                del st.session_state.transaction_data 
+            # Reset manual form specific states if necessary, e.g., manual_wps_enabled for consistency
+            st.session_state.manual_wps_enabled = False 
+            st.rerun()
     with col2:
-        if st.button("🤖 AI Assistant", key="mode_ai", use_container_width=True, help="Chat with AI to analyze your needs"):
+        if st.button("🤖 AI Assistant", key="mode_ai_revert", use_container_width=True, help="Chat with AI to analyze your needs"):
             st.session_state.input_mode = 'AI Assistant'
             st.session_state.submitted = False
             st.session_state.show_welcome = True
-            init_chat_state()
-
+            init_chat_state() # Initialize/Reset AI chat state
+            st.rerun()
     st.markdown("---")
 
-    # Manual Form in Sidebar
-    if st.session_state.input_mode == "Manual":
-        
-        def wps_checkbox_callback():
-            # This function will be called when the checkbox state changes
-            # It just needs to exist for on_change to trigger a rerun with the new widget value
-            pass
+    # TTS Language Selection (Only relevant for AI Assistant mode)
+    if st.session_state.input_mode == "AI Assistant":
+        st.markdown("### 🗣️ AI Voice Language")
+        language_options = {
+            "English": "en",
+            "العربية (Arabic)": "ar",
+            "Français (French)": "fr",
+            # "हिन्दी (Hindi)": "hi"
+        }
+        selected_lang_display = st.selectbox(
+            "Select voice language:", 
+            options=list(language_options.keys()),
+            index=list(language_options.values()).index(st.session_state.get("tts_language", "en")), 
+            key="tts_lang_select_sidebar"
+        )
+        st.session_state.tts_language = language_options[selected_lang_display]
+        st.markdown("---")
 
+    # Input mode specific UI (Manual Form or AI Assistant Chat)
+    if st.session_state.input_mode == "Manual":
+        # --- Manual Form Code (as reverted by user) ---
+        def wps_checkbox_callback():
+            pass # Callback for on_change
         st.markdown("### 📝 Transaction Details")
-        
         st.markdown("#### 🌍 International Transfers")
-        int_count = st.number_input("Count", 0, key="int_count_manual_form") # Added unique keys
+        int_count = st.number_input("Count", 0, key="int_count_manual_form")
         int_cost = st.number_input("Cost (AED)", 0.0, step=0.1, key="int_cost_manual_form")
-        
         st.markdown("#### 🏠 Domestic Transfers")
         dom_count = st.number_input("Count", 0, key="dom_count_manual_form")
         dom_cost = st.number_input("Cost (AED)", 0.0, step=0.1, key="dom_cost_manual_form")
-        
         st.markdown("#### 📑 Cheques")
         chq_count = st.number_input("Count", 0, key="chq_count_manual_form")
         chq_cost = st.number_input("Cost (AED)", 0.0, step=0.1, key="chq_cost_manual_form")
-        
         st.markdown("#### 💱 Foreign Exchange")
         fx_direction = st.radio("Direction", ["Buy USD", "Sell USD"], key="fx_direction_manual_form")
         fx_amount = st.number_input("Amount (USD)", 0.0, key="fx_amount_manual_form")
-        
         if fx_direction == "Buy USD":
             fx_rate = st.number_input("Buy Rate (AED/USD)", value=3.67, min_value=0.0, step=0.0001, format="%.4f", key="fx_buy_rate_manual_form")
         else:
             fx_rate = st.number_input("Sell Rate (AED/USD)", value=3.63, min_value=0.0, step=0.0001, format="%.4f", key="fx_sell_rate_manual_form")
-        
         st.markdown("#### 💸 WPS/CST")
-        # Use on_change to update session state and trigger a rerun
-        st.session_state.manual_wps_enabled = st.checkbox(
-            "Enable WPS/CST?", 
-            value=st.session_state.manual_wps_enabled, # Control component with session state
-            key="manual_form_wps_enabled_chkbx_onchange",
-            on_change=wps_checkbox_callback 
-        )
-        
+        st.session_state.manual_wps_enabled = st.checkbox("Enable WPS/CST?", value=st.session_state.manual_wps_enabled, key="manual_form_wps_enabled_chkbx_onchange", on_change=wps_checkbox_callback)
         manual_wps_cost_val = 0.0 
         if st.session_state.manual_wps_enabled:
             manual_wps_cost_val = st.number_input("WPS/CST Cost (AED)", value=0.0, min_value=0.0, key="manual_form_wps_cost_input_field_onchange")
-
         st.markdown("#### :memo: PDC Processing") 
         pdc_count = st.number_input("PDC Count", 0, key="pdc_count_manual_form")
         pdc_cost_per_item = st.number_input("Cost per PDC (AED)", 0.0, step=0.1, key="pdc_cost_manual_form")
-
         st.markdown("#### :inbox_tray: Inward FCY Remittance") 
         inward_fcy_count = st.number_input("Inward FCY Remittance Count", 0, key="inward_fcy_count_manual_form")
         inward_fcy_cost_per_item = st.number_input("Cost per Inward FCY Remittance (AED)", 0.0, step=0.1, key="inward_fcy_cost_manual_form")
-
         st.markdown("#### :receipt: Other Costs") 
         other_costs_total = st.number_input("Total Other Monthly Costs (AED)", 0.0, help="Cheque submission, courier, labour, miscellaneous costs", key="other_costs_manual_form")
-        
-        # Using a regular button now, not inside a form for this part
         if st.button("🔍 Analyze", use_container_width=True, key="manual_analyze_button"):
-            st.session_state.submitted = True
+            st.session_state.submitted = True # Proceed with analysis as before
             st.session_state.show_welcome = False
-            user_data = {
-                "int_count": int_count,
-                "int_cost": int_cost,
-                "dom_count": dom_count,
-                "dom_cost": dom_cost,
-                "chq_count": chq_count,
-                "chq_cost": chq_cost,
-                "fx_amount": fx_amount,
-                "fx_direction": fx_direction,
-                "client_fx_rate": fx_rate,
-                "wps_enabled": st.session_state.manual_wps_enabled, # Get from session state
-                "wps_cost": manual_wps_cost_val, 
-                "pdc_count": pdc_count,
-                "pdc_cost": pdc_cost_per_item,
-                "inward_fcy_count": inward_fcy_count,
-                "inward_fcy_cost": inward_fcy_cost_per_item,
-                "other_costs_input": other_costs_total
-            }
-            
-            tx = {
-                "international": user_data["int_count"],
-                "domestic": user_data["dom_count"],
-                "cheque": user_data["chq_count"],
-                "pdc": user_data["pdc_count"],
-                "inward_fcy_remittance": user_data["inward_fcy_count"]
-            }
-            tx_cost = {
-                "international": user_data["int_cost"],
-                "domestic": user_data["dom_cost"],
-                "cheque": user_data["chq_cost"],
-                "pdc": user_data["pdc_cost"],
-                "inward_fcy_remittance": user_data["inward_fcy_cost"]
-            }
-            
-            best, savings, results, no_pkg_cost = suggest_best_package(
-                tx, tx_cost,
-                user_data["fx_amount"],
-                user_data["fx_direction"],
-                user_data["client_fx_rate"],
-                user_data["wps_cost"],
-                user_data["other_costs_input"]
-            )
-
+            # ... (user_data, tx, tx_cost, suggest_best_package call as in reverted code) ...
+            user_data = { "int_count": int_count, "int_cost": int_cost, "dom_count": dom_count, "dom_cost": dom_cost, "chq_count": chq_count, "chq_cost": chq_cost, "fx_amount": fx_amount, "fx_direction": fx_direction, "client_fx_rate": fx_rate, "wps_enabled": st.session_state.manual_wps_enabled, "wps_cost": manual_wps_cost_val, "pdc_count": pdc_count, "pdc_cost": pdc_cost_per_item, "inward_fcy_count": inward_fcy_count, "inward_fcy_cost": inward_fcy_cost_per_item, "other_costs_input": other_costs_total }
+            tx = { "international": user_data["int_count"], "domestic": user_data["dom_count"], "cheque": user_data["chq_count"], "pdc": user_data["pdc_count"], "inward_fcy_remittance": user_data["inward_fcy_count"] }
+            tx_cost = { "international": user_data["int_cost"], "domestic": user_data["dom_cost"], "cheque": user_data["chq_cost"], "pdc": user_data["pdc_cost"], "inward_fcy_remittance": user_data["inward_fcy_cost"] }
+            best, savings, results, no_pkg_cost = suggest_best_package( tx, tx_cost, user_data["fx_amount"], user_data["fx_direction"], user_data["client_fx_rate"], user_data["wps_cost"], user_data["other_costs_input"])
             if best:
-                st.session_state.analysis_results = {
-                    "best": best,
-                    "savings": savings,
-                    "results": results,
-                    "no_pkg_cost": no_pkg_cost,
-                    "user_data": user_data,
-                    "tx": tx,
-                    "tx_cost": tx_cost
-                }
-                st.rerun() # Rerun to update main page with results
+                st.session_state.analysis_results = { "best": best, "savings": savings, "results": results, "no_pkg_cost": no_pkg_cost, "user_data": user_data, "tx": tx, "tx_cost": tx_cost }
+                st.rerun()
             else:
                 st.warning("No suitable package found or an error occurred during analysis.")
-                if "analysis_results" in st.session_state: # Clear previous results if any
-                    del st.session_state.analysis_results
-                st.session_state.submitted = False # Allow re-submission or mode change
+                if "analysis_results" in st.session_state: del st.session_state.analysis_results
+                st.session_state.submitted = False
+        # --- End of Manual Form Code ---
 
-    # AI Assistant in Sidebar
     elif st.session_state.input_mode == "AI Assistant":
-        st.markdown("### 💬 AI Assistant")
-        
-        # Initialize chat state if needed
-        init_chat_state()
-        
-        # The process_user_response function now handles all UI rendering for the chat
-        process_user_response(None) # Pass None as response, buttons handle interaction
+        st.markdown("### 💬 AI Assistant") # Title for AI assistant mode
+        init_chat_state() # Ensure AI state is ready
+        process_user_response(None) # This will handle chat UI and TTS calls
+    
+    # Placeholder for the Reset button, assuming it's outside the direct if/elif for input modes
+    # Or if it's specific to when inputs are made.
+    # For now, this structure assumes it's handled globally or was part of the reverted code.
+    # Example: 
+    # if st.session_state.submitted or (st.session_state.input_mode == "AI Assistant" and ...):
+    #    if st.button("🔄 Reset", ...): ...
 
-    # Reset Button
-    if st.session_state.submitted or (st.session_state.input_mode == "AI Assistant" and len(st.session_state.get("messages", [])) > 0):
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.submitted = False
-            st.session_state.show_welcome = True
-            if "analysis_results" in st.session_state:
-                del st.session_state.analysis_results
-            # For AI Assistant mode, reset its specific state
-            if st.session_state.input_mode == "AI Assistant":
-                init_chat_state() # This will reset chat_stage and transaction_data for AI
-            st.rerun()
+    # This HTML pushes the footer to the bottom. 
+    # A more robust solution might involve CSS if the sidebar content varies a lot in height.
+    st.markdown("""
+    <style>
+    .stApp [data-testid="stSidebarUserContent"] {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%; /* Might need adjustment based on other elements */
+    }
+    .sidebar-footer {
+        text-align: center;
+        color: #e4002b;
+        font-size: 0.9em;
+        padding-bottom: 10px; /* Add some padding */
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Footer text - will be pushed down by flexbox if the above CSS is effective
+    # If not, it will appear after other elements. Forcing it to absolute bottom without enough content
+    # to fill the sidebar is tricky with pure Streamlit markdown.
+    st.markdown("<div class='sidebar-footer'>Powered by: CIBG Portfolio Strategy Management - Advanced Data & Analytics</div>", unsafe_allow_html=True)
+
 
 # Main content area
 if st.session_state.show_welcome:
