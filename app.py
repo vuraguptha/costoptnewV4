@@ -4,7 +4,6 @@ import plotly.express as px
 import openai
 import os
 import json
-# from fpdf import FPDF
 from dotenv import load_dotenv
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
@@ -13,12 +12,22 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import time
 from gtts import gTTS # Import gTTS
+import base64 # Added for image encoding
 
 
 load_dotenv()
 
 # Set OpenAI API Key
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+def img_to_base64(image_path):
+    """Convert image to base64"""
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except FileNotFoundError:
+        # This error is handled where the function is called, to avoid stopping the app
+        return None
 
 # -------------------- TTS HELPER FUNCTION --------------------
 def play_text_as_speech(text_to_speak):
@@ -35,15 +44,18 @@ def play_text_as_speech(text_to_speak):
         st.warning(f"Could not play speech (lang: {selected_language}): {e}")
 
 # -------------------- UI CONFIG & APP NAMING --------------------
-st.set_page_config(page_title="Takhfīd Genie", layout="wide", page_icon="🧞‍♂️") 
+st.set_page_config(page_title="Takhfīd Genie", layout="wide", page_icon="🧞‍♂️")
 APP_TITLE = "Takhfīd Genie"
-MAIN_APP_IMAGE_FILENAME = "takhfid_genie_image.png" 
-SIDEBAR_IMAGE_FILENAME = "sidebar_logo.png" # <<< YOU NEED TO PROVIDE THIS IMAGE FILE
+APP_SUBTITLE = "Your AI-Powered Business First Package Pricing Expert."
+MAIN_APP_IMAGE_FILENAME = "takhfid_genie_image.png"
+ADCB_LOGO_FILENAME = "adcb_logo.png" # Provide this in the script directory
+WATERMARK_IMAGE_FILENAME = "adcb_watermark.png" # Provide this in the script directory
 
 # Construct absolute paths to the images
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MAIN_APP_IMAGE_PATH = os.path.join(SCRIPT_DIR, MAIN_APP_IMAGE_FILENAME)
-SIDEBAR_IMAGE_PATH = os.path.join(SCRIPT_DIR, SIDEBAR_IMAGE_FILENAME)
+ADCB_LOGO_PATH = os.path.join(SCRIPT_DIR, ADCB_LOGO_FILENAME)
+WATERMARK_IMAGE_PATH = os.path.join(SCRIPT_DIR, WATERMARK_IMAGE_FILENAME)
 
 # -------------------- PACKAGE CONFIG --------------------
 packages = {
@@ -226,37 +238,6 @@ def suggest_best_package(transactions, transaction_costs, fx_amount, fx_directio
     return best_pkg, max_savings, results, no_pkg_cost
 
 
-def parse_input_with_ai(user_input):
-    system_prompt = (
-        "You are a financial assistant. Extract transaction counts and unit costs from text. "
-        "Reply in this exact JSON format: "
-        '{"international_count": int, "international_cost": float, '
-        '"domestic_count": int, "domestic_cost": float, '
-        '"cheque_count": int, "cheque_cost": float, '
-        '"wps_enabled": true/false, "wps_cost": float, '
-        '"fx_amount": float, "fx_direction": "Buy USD"/"Sell USD", "fx_rate": float}'
-    )
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            temperature=0.2,
-        )
-        json_str = response.choices[0].message.content.strip()
-        parsed = json.loads(json_str)
-
-        # Validate FX direction
-        if parsed["fx_direction"] not in ["Buy USD", "Sell USD"]:
-            parsed["fx_direction"] = "Buy USD"
-        return parsed
-    except Exception as e:
-        st.error(f"Error parsing AI response: {e}")
-        return None
-
-
 def export_to_csv(results, user_data, best, savings, no_pkg_cost):
     # Base data for summary
     data = []
@@ -265,24 +246,24 @@ def export_to_csv(results, user_data, best, savings, no_pkg_cost):
     detailed_data.append(["Component", "Details", "Cost (AED)"])
 
     # --- No Package Cost Breakdown ---
-    detailed_data.append(["No Package", "International Txns", f"{user_data['int_count'] * user_data['int_cost']:.2f}"])
-    detailed_data.append(["No Package", "Domestic Txns", f"{user_data['dom_count'] * user_data['dom_cost']:.2f}"])
-    detailed_data.append(["No Package", "Cheque Txns", f"{user_data['chq_count'] * user_data['chq_cost']:.2f}"])
-    detailed_data.append(["No Package", "PDC Txns", f"{user_data['pdc_count'] * user_data['pdc_cost']:.2f}"])
-    detailed_data.append(["No Package", "Inward FCY Remittances", f"{user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:.2f}"])
+    detailed_data.append(["No Package", "International Txns", f"{user_data['int_count'] * user_data['int_cost']:,.2f}"])
+    detailed_data.append(["No Package", "Domestic Txns", f"{user_data['dom_count'] * user_data['dom_cost']:,.2f}"])
+    detailed_data.append(["No Package", "Cheque Txns", f"{user_data['chq_count'] * user_data['chq_cost']:,.2f}"])
+    detailed_data.append(["No Package", "PDC Txns", f"{user_data['pdc_count'] * user_data['pdc_cost']:,.2f}"])
+    detailed_data.append(["No Package", "Inward FCY Remittances", f"{user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:,.2f}"])
     if user_data['fx_amount'] > 0:
-        detailed_data.append(["No Package", "FX Conversion (Market Rate)", f"{user_data['fx_amount'] * user_data['client_fx_rate']:.2f}"])
+        detailed_data.append(["No Package", "FX Conversion (Market Rate)", f"{user_data['fx_amount'] * user_data['client_fx_rate']:,.2f}"])
     else:
         detailed_data.append(["No Package", "FX Conversion (Market Rate)", "0.00"])
-    detailed_data.append(["No Package", "WPS/CST Cost", f"{user_data['wps_cost']:.2f}"])
-    detailed_data.append(["No Package", "Other Costs (User Input)", f"{user_data['other_costs_input']:.2f}"])
-    detailed_data.append(["No Package", "TOTAL COST (NO PACKAGE)", f"{no_pkg_cost:.2f}"])
+    detailed_data.append(["No Package", "WPS/CST Cost", f"{user_data['wps_cost']:,.2f}"])
+    detailed_data.append(["No Package", "Other Costs (User Input)", f"{user_data['other_costs_input']:,.2f}"])
+    detailed_data.append(["No Package", "TOTAL COST (NO PACKAGE)", f"{no_pkg_cost:,.2f}"])
     detailed_data.append([]) # Blank line for separation
 
     # --- Package Cost Breakdowns ---
     for name, result_details in results.items():
         pkg_config = packages[name] # Accessing global 'packages'
-        detailed_data.append([name, "Package Fee", f"{pkg_config['cost']:.2f}"])
+        detailed_data.append([name, "Package Fee", f"{pkg_config['cost']:,.2f}"])
         
         # Loop for International, Domestic, Cheque (Transactions)
         pkg_tx_rules_csv = pkg_config["transactions"]
@@ -306,7 +287,7 @@ def export_to_csv(results, user_data, best, savings, no_pkg_cost):
                 paid_count_csv = user_txn_count_csv
                 cost_of_paid_csv = paid_count_csv * rate_applied_csv
             
-            detailed_data.append([name, f"Paid {t_type_csv.capitalize()} Txns ({paid_count_csv} @ {rate_applied_csv:.2f})", f"{cost_of_paid_csv:.2f}"])
+            detailed_data.append([name, f"Paid {t_type_csv.capitalize()} Txns ({paid_count_csv:,} @ {rate_applied_csv:,.2f})", f"{cost_of_paid_csv:,.2f}"])
 
         # Loop for PDC and Inward FCY Remittance (Services)
         for s_type_csv in ["pdc", "inward_fcy_remittance"]:
@@ -334,23 +315,23 @@ def export_to_csv(results, user_data, best, savings, no_pkg_cost):
                 paid_service_count_csv = user_service_count_csv
                 cost_of_paid_service_csv = paid_service_count_csv * rate_applied_service_csv
             
-            detailed_data.append([name, f"Paid {s_type_csv.replace('_', ' ').title()} ({paid_service_count_csv} @ {rate_applied_service_csv:.2f})", f"{cost_of_paid_service_csv:.2f}"])
+            detailed_data.append([name, f"Paid {s_type_csv.replace('_', ' ').title()} ({paid_service_count_csv:,} @ {rate_applied_service_csv:,.2f})", f"{cost_of_paid_service_csv:,.2f}"])
 
         if user_data['fx_amount'] > 0:
             pkg_fx_rate = pkg_config["fx_buy_rate"] if user_data["fx_direction"] == "Buy USD" else pkg_config["fx_sell_rate"]
-            detailed_data.append([name, "FX Conversion (Package Rate)", f"{user_data['fx_amount'] * pkg_fx_rate:.2f}"])
+            detailed_data.append([name, "FX Conversion (Package Rate)", f"{user_data['fx_amount'] * pkg_fx_rate:,.2f}"])
         else:
             detailed_data.append([name, "FX Conversion (Package Rate)", "0.00"])
-        detailed_data.append([name, "WPS/CST Cost", f"{user_data['wps_cost']:.2f}"])
+        detailed_data.append([name, "WPS/CST Cost", f"{user_data['wps_cost']:,.2f}"])
         
         # Other Costs with Package (CSV)
         other_costs_pkg_val = 0.0
         if pkg_config.get("other_costs_apply_input", False):
             other_costs_pkg_val = user_data['other_costs_input']
-        detailed_data.append([name, f"Other Costs (User Input)", f"{other_costs_pkg_val:.2f}"])
+        detailed_data.append([name, f"Other Costs (User Input)", f"{other_costs_pkg_val:,.2f}"])
 
-        detailed_data.append([name, f"TOTAL COST ({name})", f"{result_details['total_cost']:.2f}"])
-        detailed_data.append([name, f"SAVINGS ({name})", f"{result_details['savings']:.2f}"])
+        detailed_data.append([name, f"TOTAL COST ({name})", f"{result_details['total_cost']:,.2f}"])
+        detailed_data.append([name, f"SAVINGS ({name})", f"{result_details['savings']:,.2f}"])
         
         # Complimentary Items (CSV)
         complimentary_items_csv = pkg_config.get("complimentary_items", [])
@@ -366,9 +347,9 @@ def export_to_csv(results, user_data, best, savings, no_pkg_cost):
     
     # Summary table data (remains for a quick overview)
     data.append(["Category", "Total Cost (AED)", "Savings (AED)"])
-    data.append(["No Package", f"{no_pkg_cost:.2f}", "-"])
+    data.append(["No Package", f"{no_pkg_cost:,.2f}", "-"])
     for name, result in results.items():
-        data.append([name, f"{result['total_cost']:.2f}", f"{result['savings']:.2f}"])
+        data.append([name, f"{result['total_cost']:,.2f}", f"{result['savings']:,.2f}"])
     df_summary_export = pd.DataFrame(data[1:], columns=data[0])
 
     # Combine summary and detailed breakdown with a separator
@@ -393,7 +374,7 @@ def export_to_pdf(results, user_data, best, savings, no_pkg_cost):
 
     # Best package summary
     normal_style = styles['Normal']
-    elements.append(Paragraph(f"<b>Best Package:</b> {best} | <b>Total Savings:</b> {savings:.2f} AED", normal_style))
+    elements.append(Paragraph(f"<b>Best Package:</b> {best} | <b>Total Savings:</b> {savings:,.2f} AED", normal_style))
     elements.append(Spacer(1, 12))
 
     # Create table data
@@ -401,10 +382,10 @@ def export_to_pdf(results, user_data, best, savings, no_pkg_cost):
         ["Package Name", "Total Cost (AED)", "Savings (AED)"]
     ]
     for name, result in results.items():
-        table_data.append([name, f"{result['total_cost']:.2f}", f"{result['savings']:.2f}"])
+        table_data.append([name, f"{result['total_cost']:,.2f}", f"{result['savings']:,.2f}"])
 
     # Add No Package row
-    table_data.append(["No Package", f"{no_pkg_cost:.2f}", "-"])
+    table_data.append(["No Package", f"{no_pkg_cost:,.2f}", "-"])
 
     # Create table and style
     pdf_table = Table(table_data)
@@ -441,41 +422,41 @@ def export_to_pdf(results, user_data, best, savings, no_pkg_cost):
     elements.append(Spacer(1, 6))
     
     # Transaction Costs (No Package)
-    elements.append(Paragraph(f"   - International Transactions: {user_data['int_count']} × {user_data['int_cost']:.2f} = {user_data['int_count'] * user_data['int_cost']:.2f} AED", normal_style))
-    elements.append(Paragraph(f"   - Domestic Transactions: {user_data['dom_count']} × {user_data['dom_cost']:.2f} = {user_data['dom_count'] * user_data['dom_cost']:.2f} AED", normal_style))
-    elements.append(Paragraph(f"   - Cheque Transactions: {user_data['chq_count']} × {user_data['chq_cost']:.2f} = {user_data['chq_count'] * user_data['chq_cost']:.2f} AED", normal_style))
-    elements.append(Paragraph(f"   - PDC Transactions: {user_data['pdc_count']} × {user_data['pdc_cost']:.2f} = {user_data['pdc_count'] * user_data['pdc_cost']:.2f} AED", normal_style))
-    elements.append(Paragraph(f"   - Inward FCY Remittances: {user_data['inward_fcy_count']} × {user_data['inward_fcy_cost']:.2f} = {user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - International Transactions: {user_data['int_count']:,} × {user_data['int_cost']:,.2f} = {user_data['int_count'] * user_data['int_cost']:,.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - Domestic Transactions: {user_data['dom_count']:,} × {user_data['dom_cost']:,.2f} = {user_data['dom_count'] * user_data['dom_cost']:,.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - Cheque Transactions: {user_data['chq_count']:,} × {user_data['chq_cost']:,.2f} = {user_data['chq_count'] * user_data['chq_cost']:,.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - PDC Transactions: {user_data['pdc_count']:,} × {user_data['pdc_cost']:,.2f} = {user_data['pdc_count'] * user_data['pdc_cost']:,.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - Inward FCY Remittances: {user_data['inward_fcy_count']:,} × {user_data['inward_fcy_cost']:,.2f} = {user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:,.2f} AED", normal_style))
     total_no_pkg_txn_costs = user_data['int_count'] * user_data['int_cost'] + \
                              user_data['dom_count'] * user_data['dom_cost'] + \
                              user_data['chq_count'] * user_data['chq_cost'] + \
                              user_data['pdc_count'] * user_data['pdc_cost'] + \
                              user_data['inward_fcy_count'] * user_data['inward_fcy_cost']
-    elements.append(Paragraph(f"   - <b>Total Transaction & Service Costs (No Package):</b> {total_no_pkg_txn_costs:.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - <b>Total Transaction & Service Costs (No Package):</b> {total_no_pkg_txn_costs:,.2f} AED", normal_style))
     elements.append(Spacer(1, 6))
 
     # FX Impact (No Package)
     elements.append(Paragraph(f"   - <b>FX Impact (No Package):</b>", normal_style))
     elements.append(Paragraph(f"     - Direction: {user_data['fx_direction']}", normal_style))
-    elements.append(Paragraph(f"     - Client's Rate: {user_data['client_fx_rate']:.4f} AED/USD", normal_style))
-    elements.append(Paragraph(f"     - FX Amount: {user_data['fx_amount']:.2f} USD", normal_style))
+    elements.append(Paragraph(f"     - Client's Rate: {user_data['client_fx_rate']:,.4f} AED/USD", normal_style))
+    elements.append(Paragraph(f"     - FX Amount: {user_data['fx_amount']:,.2f} USD", normal_style))
     if user_data["fx_direction"] == "Buy USD":
         no_pkg_fx_display_value = user_data['fx_amount'] * user_data['client_fx_rate']
-        elements.append(Paragraph(f"     - Resulting FX Cost (Buying USD): {no_pkg_fx_display_value:.2f} AED", normal_style))
+        elements.append(Paragraph(f"     - Resulting FX Cost (Buying USD): {no_pkg_fx_display_value:,.2f} AED", normal_style))
     else: # Sell USD
         no_pkg_fx_display_value = user_data['fx_amount'] * user_data['client_fx_rate']
-        elements.append(Paragraph(f"     - Resulting FX Proceeds (Selling USD at Client's Rate): {no_pkg_fx_display_value:.2f} AED", normal_style))
+        elements.append(Paragraph(f"     - Resulting FX Proceeds (Selling USD at Client's Rate): {no_pkg_fx_display_value:,.2f} AED", normal_style))
     elements.append(Spacer(1, 6))
 
     # WPS/CST Cost (No Package)
-    elements.append(Paragraph(f"   - WPS/CST Cost: {user_data['wps_cost']:.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - WPS/CST Cost: {user_data['wps_cost']:,.2f} AED", normal_style))
     elements.append(Spacer(1, 6))
     
     # Other Costs (No Package)
-    elements.append(Paragraph(f"   - Other Costs (User Input): {user_data['other_costs_input']:.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - Other Costs (User Input): {user_data['other_costs_input']:,.2f} AED", normal_style))
     elements.append(Spacer(1, 6))
 
-    elements.append(Paragraph(f"   - <b>Total Cost Without Any Package:</b> {no_pkg_cost:.2f} AED", normal_style))
+    elements.append(Paragraph(f"   - <b>Total Cost Without Any Package:</b> {no_pkg_cost:,.2f} AED", normal_style))
     elements.append(Spacer(1, 12))
 
     # --- Best Package Cost Breakdown ---
@@ -486,7 +467,7 @@ def export_to_pdf(results, user_data, best, savings, no_pkg_cost):
         pkg_details = packages[best] # Accessing global 'packages'
         best_pkg_result = results[best]
 
-        elements.append(Paragraph(f"   - Package Fee: {pkg_details['cost']:.2f} AED", normal_style))
+        elements.append(Paragraph(f"   - Package Fee: {pkg_details['cost']:,.2f} AED", normal_style))
         
         # Transaction costs with package
         elements.append(Paragraph("   - <b>Paid Transactions & Services (after free units):</b>", normal_style))
@@ -532,42 +513,42 @@ def export_to_pdf(results, user_data, best, savings, no_pkg_cost):
                 paid_count_pdf = user_item_count_pdf
                 cost_of_paid_pdf = paid_count_pdf * rate_applied_pdf
             
-            elements.append(Paragraph(f"     - {item_type_pdf.replace('_', ' ').title()}: {paid_count_pdf} × {rate_applied_pdf:.2f} = {cost_of_paid_pdf:.2f} AED", normal_style))
+            elements.append(Paragraph(f"     - {item_type_pdf.replace('_', ' ').title()}: {paid_count_pdf:,} × {rate_applied_pdf:,.2f} = {cost_of_paid_pdf:,.2f} AED", normal_style))
         elements.append(Spacer(1, 6))
 
         # FX Impact with package
         elements.append(Paragraph(f"   - <b>FX Impact with Package ({best}):</b>", normal_style))
         elements.append(Paragraph(f"     - Direction: {user_data['fx_direction']}", normal_style))
         pkg_fx_rate = pkg_details["fx_buy_rate"] if user_data["fx_direction"] == "Buy USD" else pkg_details["fx_sell_rate"]
-        elements.append(Paragraph(f"     - Package Rate: {pkg_fx_rate:.4f} AED/USD", normal_style))
-        elements.append(Paragraph(f"     - FX Amount: {user_data['fx_amount']:.2f} USD", normal_style))
+        elements.append(Paragraph(f"     - Package Rate: {pkg_fx_rate:,.4f} AED/USD", normal_style))
+        elements.append(Paragraph(f"     - FX Amount: {user_data['fx_amount']:,.2f} USD", normal_style))
         if user_data["fx_direction"] == "Buy USD":
             pkg_fx_display_value = user_data['fx_amount'] * pkg_fx_rate
-            elements.append(Paragraph(f"     - Resulting FX Cost (Buying USD): {pkg_fx_display_value:.2f} AED", normal_style))
+            elements.append(Paragraph(f"     - Resulting FX Cost (Buying USD): {pkg_fx_display_value:,.2f} AED", normal_style))
         else: # Sell USD
             pkg_fx_display_value = user_data['fx_amount'] * pkg_fx_rate
-            elements.append(Paragraph(f"     - Resulting FX Proceeds (Selling USD at Package Rate): {pkg_fx_display_value:.2f} AED", normal_style))
+            elements.append(Paragraph(f"     - Resulting FX Proceeds (Selling USD at Package Rate): {pkg_fx_display_value:,.2f} AED", normal_style))
             fx_gain_from_package_rate = pkg_fx_display_value - (user_data['fx_amount'] * user_data['client_fx_rate'])
-            elements.append(Paragraph(f"     - Additional gain from package rate vs client's rate: {fx_gain_from_package_rate:.2f} AED", normal_style))
+            elements.append(Paragraph(f"     - Additional gain from package rate vs client's rate: {fx_gain_from_package_rate:,.2f} AED", normal_style))
         elements.append(Spacer(1, 6))
 
         # WPS/CST Cost (same as no package)
-        elements.append(Paragraph(f"   - WPS/CST Cost: {user_data['wps_cost']:.2f} AED", normal_style))
+        elements.append(Paragraph(f"   - WPS/CST Cost: {user_data['wps_cost']:,.2f} AED", normal_style))
         elements.append(Spacer(1, 6))
 
         # Other Costs with Package (PDF)
         elements.append(Paragraph(f"   - <b>Other Costs (User Input) with Package ({best}):</b>", normal_style))
         if pkg_details.get("other_costs_apply_input", False):
-            elements.append(Paragraph(f"     - Other Costs Added: {user_data['other_costs_input']:.2f} AED", normal_style))
+            elements.append(Paragraph(f"     - Other Costs Added: {user_data['other_costs_input']:,.2f} AED", normal_style))
         else:
             elements.append(Paragraph(f"     - Other Costs Included/Free with Package: 0.00 AED", normal_style))
         elements.append(Spacer(1, 6))
 
-        elements.append(Paragraph(f"   - <b>Total Cost With Best Package ({best}):</b> {best_pkg_result['total_cost']:.2f} AED", normal_style))
+        elements.append(Paragraph(f"   - <b>Total Cost With Best Package ({best}):</b> {best_pkg_result['total_cost']:,.2f} AED", normal_style))
         elements.append(Spacer(1, 12))
 
         # --- Savings ---
-        elements.append(Paragraph(f"<b>3. Total Savings ({best}):</b> {savings:.2f} AED", normal_style))
+        elements.append(Paragraph(f"<b>3. Total Savings ({best}):</b> {savings:,.2f} AED", normal_style))
         elements.append(Spacer(1, 12))
 
         # Complimentary Items (PDF)
@@ -865,9 +846,10 @@ def process_user_response(response):
         st.write(text_for_speech)
         other_total_cost = st.number_input("Total Other Costs", min_value=0.0, step=1.0, key="other_costs_input_ai")
         if st.button("View Analysis", key="submit_other_costs_ai"):
-            data["other_costs_input"] = other_total_cost
-            analysis_successful = generate_analysis()
-            st.session_state.chat_stage = "analysis" if analysis_successful else "no_savings_found"
+            with st.spinner("Analyzing your data... This may take a moment."):
+                data["other_costs_input"] = other_total_cost
+                analysis_successful = generate_analysis()
+                st.session_state.chat_stage = "analysis" if analysis_successful else "no_savings_found"
             st.rerun()
 
     elif stage == "analysis":
@@ -1004,8 +986,76 @@ if "chat_stage" not in st.session_state:
 
 # -------------------- UI RENDER STARTS HERE --------------------
 
+def apply_custom_css():
+    """Applies custom CSS for styling, including sidebar watermark."""
+    watermark_base64 = img_to_base64(WATERMARK_IMAGE_PATH)
+    
+    # Base CSS for titles and sidebar width
+    st.markdown(f"""
+    <style>
+        /* Main Title Styles */
+        .main-title {{
+            font-size: 4rem !important;
+            font-weight: 700;
+            color: #e4002b; /* ADCB Red */
+            text-align: left;
+        }}
+        .sub-title {{
+            font-size: 1.25rem;
+            color: #333;
+            text-align: left;
+            margin-bottom: 20px;
+        }}
+        /* Fixed sidebar width */
+        [data-testid="stSidebar"] {{
+            width: 450px !important;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Add watermark if image is available
+    if watermark_base64:
+        st.markdown(f"""
+        <style>
+            [data-testid="stSidebar"] > div:first-child {{
+                position: relative;
+            }}
+            [data-testid="stSidebar"] > div:first-child::before {{
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image: url("data:image/png;base64,{watermark_base64}");
+                background-size: 70%;
+                background-repeat: no-repeat;
+                background-position: center 20px;
+                opacity: 0.05;
+                z-index: -1;
+                pointer-events: none;
+            }}
+        </style>
+        """, unsafe_allow_html=True)
+    else:
+        # Show a warning in the sidebar if the watermark image is not found
+        st.sidebar.warning("Sidebar watermark image not found.", icon="⚠️")
+
+apply_custom_css()
+
+col1, col2 = st.columns([4, 1], vertical_alignment="center")
+with col1:
+    st.markdown(f'<p class="main-title">{APP_TITLE}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="sub-title">{APP_SUBTITLE}</p>', unsafe_allow_html=True)
+with col2:
+    try:
+        st.image(ADCB_LOGO_PATH, width=150)
+    except Exception:
+        # This will show a small error message in the app if the logo is not found
+        st.error(f"Logo not found", icon="🖼️")
+
 # Main content area title
-st.title(APP_TITLE) 
+# st.title(APP_TITLE) 
 
 # Sidebar UI
 with st.sidebar:
@@ -1101,21 +1151,22 @@ with st.sidebar:
         st.markdown("#### :receipt: Other Costs") 
         other_costs_total = st.number_input("Total Other Monthly Costs (AED)", 0.0, help="Cheque submission, courier, labour, miscellaneous costs", key="other_costs_manual_form")
         if st.button("🔍 Analyze", use_container_width=True, key="manual_analyze_button"):
-            st.session_state.submitted = True # Proceed with analysis as before
-            st.session_state.show_welcome = False
-            # ... (user_data, tx, tx_cost, suggest_best_package call as in reverted code) ...
-            user_data = { "int_count": int_count, "int_cost": int_cost, "dom_count": dom_count, "dom_cost": dom_cost, "chq_count": chq_count, "chq_cost": chq_cost, "fx_amount": fx_amount, "fx_direction": fx_direction, "client_fx_rate": fx_rate, "wps_enabled": st.session_state.manual_wps_enabled, "wps_cost": manual_wps_cost_val, "pdc_count": pdc_count, "pdc_cost": pdc_cost_per_item, "inward_fcy_count": inward_fcy_count, "inward_fcy_cost": inward_fcy_cost_per_item, "other_costs_input": other_costs_total }
-            tx = { "international": user_data["int_count"], "domestic": user_data["dom_count"], "cheque": user_data["chq_count"], "pdc": user_data["pdc_count"], "inward_fcy_remittance": user_data["inward_fcy_count"] }
-            tx_cost = { "international": user_data["int_cost"], "domestic": user_data["dom_cost"], "cheque": user_data["chq_cost"], "pdc": user_data["pdc_cost"], "inward_fcy_remittance": user_data["inward_fcy_cost"] }
-            best, savings, results, no_pkg_cost = suggest_best_package( tx, tx_cost, user_data["fx_amount"], user_data["fx_direction"], user_data["client_fx_rate"], user_data["wps_cost"], user_data["other_costs_input"])
-            if best:
-                st.session_state.analysis_results = { "best": best, "savings": savings, "results": results, "no_pkg_cost": no_pkg_cost, "user_data": user_data, "tx": tx, "tx_cost": tx_cost }
-                st.rerun()
-            else:
-                st.warning("No suitable package found or an error occurred during analysis.")
-                if "analysis_results" in st.session_state: del st.session_state.analysis_results
-                st.session_state.submitted = False
-        # --- End of Manual Form Code ---
+            with st.spinner("Analyzing your data... This may take a moment."):
+                st.session_state.submitted = True # Proceed with analysis as before
+                st.session_state.show_welcome = False
+                # ... (user_data, tx, tx_cost, suggest_best_package call as in reverted code) ...
+                user_data = { "int_count": int_count, "int_cost": int_cost, "dom_count": dom_count, "dom_cost": dom_cost, "chq_count": chq_count, "chq_cost": chq_cost, "fx_amount": fx_amount, "fx_direction": fx_direction, "client_fx_rate": fx_rate, "wps_enabled": st.session_state.manual_wps_enabled, "wps_cost": manual_wps_cost_val, "pdc_count": pdc_count, "pdc_cost": pdc_cost_per_item, "inward_fcy_count": inward_fcy_count, "inward_fcy_cost": inward_fcy_cost_per_item, "other_costs_input": other_costs_total }
+                tx = { "international": user_data["int_count"], "domestic": user_data["dom_count"], "cheque": user_data["chq_count"], "pdc": user_data["pdc_count"], "inward_fcy_remittance": user_data["inward_fcy_count"] }
+                tx_cost = { "international": user_data["int_cost"], "domestic": user_data["dom_cost"], "cheque": user_data["chq_cost"], "pdc": user_data["pdc_cost"], "inward_fcy_remittance": user_data["inward_fcy_cost"] }
+                best, savings, results, no_pkg_cost = suggest_best_package( tx, tx_cost, user_data["fx_amount"], user_data["fx_direction"], user_data["client_fx_rate"], user_data["wps_cost"], user_data["other_costs_input"])
+                if best:
+                    st.session_state.analysis_results = { "best": best, "savings": savings, "results": results, "no_pkg_cost": no_pkg_cost, "user_data": user_data, "tx": tx, "tx_cost": tx_cost }
+                    st.rerun()
+                else:
+                    st.warning("No suitable package found or an error occurred during analysis.")
+                    if "analysis_results" in st.session_state: del st.session_state.analysis_results
+                    st.session_state.submitted = False
+         # --- End of Manual Form Code ---
 
     elif st.session_state.input_mode == "AI Assistant":
         st.markdown("### 💬 AI Assistant") # Title for AI assistant mode
@@ -1184,43 +1235,43 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
     # Build the detailed calculation string
     md_lines = []
     md_lines.append("### 🔢 **Calculation Details**")
-    md_lines.append(f"Here's how choosing **{best}** saves you **{savings:.2f} AED**:")
+    md_lines.append(f"Here's how choosing **{best}** saves you **{savings:,.2f} AED**:")
     md_lines.append("\n1. **Transaction Costs Without Any Package**:")
-    md_lines.append(f"   - International: {tx['international']} × {tx_cost['international']:.2f} = {tx['international'] * tx_cost['international']:.2f} AED")
-    md_lines.append(f"   - Domestic: {tx['domestic']} × {tx_cost['domestic']:.2f} = {tx['domestic'] * tx_cost['domestic']:.2f} AED")
-    md_lines.append(f"   - Cheque: {tx['cheque']} × {tx_cost['cheque']:.2f} = {tx['cheque'] * tx_cost['cheque']:.2f} AED")
-    md_lines.append(f"   - PDC: {user_data['pdc_count']} × {user_data['pdc_cost']:.2f} = {user_data['pdc_count'] * user_data['pdc_cost']:.2f} AED")
-    md_lines.append(f"   - Inward FCY Remittance: {user_data['inward_fcy_count']} × {user_data['inward_fcy_cost']:.2f} = {user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:.2f} AED")
+    md_lines.append(f"   - International: {tx['international']:,} × {tx_cost['international']:,.2f} = {tx['international'] * tx_cost['international']:,.2f} AED")
+    md_lines.append(f"   - Domestic: {tx['domestic']:,} × {tx_cost['domestic']:,.2f} = {tx['domestic'] * tx_cost['domestic']:,.2f} AED")
+    md_lines.append(f"   - Cheque: {tx['cheque']:,} × {tx_cost['cheque']:,.2f} = {tx['cheque'] * tx_cost['cheque']:,.2f} AED")
+    md_lines.append(f"   - PDC: {user_data['pdc_count']:,} × {user_data['pdc_cost']:,.2f} = {user_data['pdc_count'] * user_data['pdc_cost']:,.2f} AED")
+    md_lines.append(f"   - Inward FCY Remittance: {user_data['inward_fcy_count']:,} × {user_data['inward_fcy_cost']:,.2f} = {user_data['inward_fcy_count'] * user_data['inward_fcy_cost']:,.2f} AED")
     total_no_pkg_base_txn_costs = tx['international'] * tx_cost['international'] + \
                                   tx['domestic'] * tx_cost['domestic'] + \
                                   tx['cheque'] * tx_cost['cheque'] + \
                                   user_data['pdc_count'] * user_data['pdc_cost'] + \
                                   user_data['inward_fcy_count'] * user_data['inward_fcy_cost']
-    md_lines.append(f"   - **Total Base Transaction & Service Costs**: {total_no_pkg_base_txn_costs:.2f} AED")
+    md_lines.append(f"   - **Total Base Transaction & Service Costs**: {total_no_pkg_base_txn_costs:,.2f} AED")
     
     md_lines.append("\n2. **FX Impact Without Any Package**:")
     md_lines.append(f"   - Direction: {user_data['fx_direction']}")
-    md_lines.append(f"   - Client's Rate: {user_data['client_fx_rate']:.4f} AED/USD")
-    md_lines.append(f"   - FX Amount: {user_data['fx_amount']:.2f} USD")
+    md_lines.append(f"   - Client's Rate: {user_data['client_fx_rate']:,.4f} AED/USD")
+    md_lines.append(f"   - FX Amount: {user_data['fx_amount']:,.2f} USD")
     if user_data["fx_direction"] == "Buy USD":
-        md_lines.append(f"   - Resulting FX Cost (Buying USD): {user_data['fx_amount'] * user_data['client_fx_rate']:.2f} AED")
+        md_lines.append(f"   - Resulting FX Cost (Buying USD): {user_data['fx_amount'] * user_data['client_fx_rate']:,.2f} AED")
     else: # Sell USD
-        md_lines.append(f"   - Resulting FX Proceeds (Selling USD at Client's Rate): {user_data['fx_amount'] * user_data['client_fx_rate']:.2f} AED")
-
+        md_lines.append(f"   - Resulting FX Proceeds (Selling USD at Client's Rate): {user_data['fx_amount'] * user_data['client_fx_rate']:,.2f} AED")
+ 
     md_lines.append("\n3. **WPS/CST Cost**:")
     md_lines.append(f"   - WPS/CST Enabled: {'Yes' if user_data['wps_enabled'] else 'No'}")
-    md_lines.append(f"   - WPS/CST Cost: {user_data['wps_cost']:.2f} AED")
-    
+    md_lines.append(f"   - WPS/CST Cost: {user_data['wps_cost']:,.2f} AED")
+     
     md_lines.append("\n4. **Other Costs (User Input - No Package)**:")
-    md_lines.append(f"   - Other Costs: {user_data['other_costs_input']:.2f} AED")
-
+    md_lines.append(f"   - Other Costs: {user_data['other_costs_input']:,.2f} AED")
+ 
     md_lines.append("\n5. **Total Cost Without Any Package**:")
-    md_lines.append(f"   - Total Cost: {no_pkg_cost:.2f} AED")
-    
+    md_lines.append(f"   - Total Cost: {no_pkg_cost:,.2f} AED")
+     
     md_lines.append(f"\n6. **Cost With Best Package ({best})**:")
-    md_lines.append(f"   - Package Cost: {packages[best]['cost']:.2f} AED")
+    md_lines.append(f"   - Package Cost: {packages[best]['cost']:,.2f} AED")
     md_lines.append("   - Remaining Transactions & Services (Paid): ")
-
+ 
     # Detailed breakdown for paid transactions based on new package structure
     pkg_rules = packages[best]
     for item_type in ["international", "domestic", "cheque", "pdc", "inward_fcy_remittance"]:
@@ -1242,17 +1293,17 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
         elif item_type == "inward_fcy_remittance":
             user_item_count = user_data['inward_fcy_count']
             client_item_rate = user_data['inward_fcy_cost']
-
+ 
         rule = None
         if item_type in ["international", "domestic", "cheque"]:
             rule = pkg_rules["transactions"].get(item_type)
         else: # pdc, inward_fcy_remittance are direct keys
             rule = pkg_rules.get(item_type)
-        
+         
         paid_count = 0
         rate_applied = client_item_rate 
         cost_of_paid = 0
-
+ 
         if rule:
             free_count = rule.get("free_count", 0)
             paid_count = max(0, user_item_count - free_count)
