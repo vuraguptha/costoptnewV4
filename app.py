@@ -18,7 +18,7 @@ import base64 # Added for image encoding
 load_dotenv()
 
 # Set OpenAI API Key
-openai.api_key = os.getenv("OPENAI_API_KEY") or st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 def img_to_base64(image_path):
     """Convert image to base64"""
