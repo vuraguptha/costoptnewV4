@@ -4,7 +4,6 @@ import plotly.express as px
 import openai
 import os
 import json
-from dotenv import load_dotenv
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -15,10 +14,8 @@ from gtts import gTTS # Import gTTS
 import base64 # Added for image encoding
 
 
-load_dotenv()
-
 # Set OpenAI API Key
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key =  st.secrets["OPENAI_API_KEY"]
 
 def img_to_base64(image_path):
     """Convert image to base64"""
@@ -1163,9 +1160,8 @@ def check_password():
     password = st.text_input("Password", type="password", key="password_input")
 
     if st.button("Login", key="login_button"):
-        # IMPORTANT: This is a hardcoded password for demonstration.
-        # For a real application, use st.secrets or an environment variable.
-        correct_password = os.getenv("APP_PASSWORD", "admin123")
+        # The password is now managed in .streamlit/secrets.toml
+        correct_password = st.secrets["APP_PASSWORD"]
         if password == correct_password:
             st.session_state["authenticated"] = True
             st.rerun()
