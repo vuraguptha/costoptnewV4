@@ -692,7 +692,8 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
     )
 
     try:
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
