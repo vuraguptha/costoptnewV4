@@ -995,6 +995,7 @@ def process_user_response(response):
     elif stage == "analysis":
         text_for_speech = "Analysis Complete! View the results in the main panel."
         st.success(text_for_speech)
+        # Remove the executive summary display from here (AI chat panel)
         # Optionally, add a button here to start a new AI chat analysis
         if st.button("Start New AI Analysis", key="new_ai_analysis_from_success"):
             init_chat_state() # Reset AI chat state
@@ -1475,343 +1476,381 @@ if st.session_state.show_welcome:
     - **AI Assistant**: Chat with our AI to analyze your needs
     """)
 
-# Show analysis results in main area if available
-if st.session_state.submitted and "analysis_results" in st.session_state:
-    results = st.session_state.analysis_results
+# --- Refactored Results Display Function ---
+def show_analysis_results(results):
     best = results["best"]
     savings = results["savings"]
     no_pkg_cost = results["no_pkg_cost"]
     user_data = results["user_data"]
     tx = results["tx"]
     tx_cost = results["tx_cost"]
-    
-    # --- Display AI Narrative Summary ---
+
+    # --- HERO BANNER ---
+    st.markdown(f"""
+    <div style='background: linear-gradient(90deg, #e4002b 60%, #fff 100%); padding: 2rem 1rem; border-radius: 18px; margin-bottom: 2rem; display: flex; align-items: center;'>
+        <div style='font-size: 3rem; margin-right: 2rem;'>🏆</div>
+        <div>
+            <div style='font-size: 2.2rem; font-weight: bold; color: #fff;'>Best Package: {best}</div>
+            <div style='font-size: 1.5rem; color: #fff;'>Estimated Savings: <span style="font-size:2.2rem; font-weight:700;">{savings:,.0f} AED/month</span></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- Executive Summary ---
     if "narrative_summary" in results and results["narrative_summary"]:
         st.markdown("###  Executive Summary")
         st.markdown(f"> *{results['narrative_summary']}*")
         st.markdown("---")
-
-    # --- Calculation details with correct FX Additional Cost logic ---
-    best_pkg_fx_rate = packages[best]["fx_buy_rate"] if user_data["fx_direction"] == "Buy USD" else packages[best]["fx_sell_rate"]
-    if user_data["fx_direction"] == "Buy USD":
-        fx_additional_cost_no_pkg = (user_data["client_fx_rate"] - best_pkg_fx_rate) * user_data["fx_amount"]
     else:
-        fx_additional_cost_no_pkg = (best_pkg_fx_rate - user_data["client_fx_rate"]) * user_data["fx_amount"]
-    no_pkg_total_cost = no_pkg_cost + fx_additional_cost_no_pkg
-    best_pkg_fees = results['results'][best]['total_cost'] - results['results'][best]['breakdown'].get('FX Additional Cost', 0)
-    savings = no_pkg_total_cost - best_pkg_fees
+        # Generate and display executive summary if not present
+        ai_narrative = generate_narrative_summary(best, savings, user_data, no_pkg_cost, results["results"])
+        st.markdown("###  Executive Summary")
+        st.markdown(f"> *{ai_narrative}*")
+        st.markdown("---")
 
-    md_lines = []
-    md_lines.append("### 🔢 **Calculation Details**")
-    md_lines.append(f"Here's how choosing **{best}** saves you **{round(savings):,} AED**:")
-    md_lines.append("\n1. **Transaction Costs Without Any Package**:")
-    md_lines.append(f"   - International: {tx['international']:,} × {tx_cost['international']:,.2f} = {round(tx['international'] * tx_cost['international']):,} AED")
-    md_lines.append(f"   - Domestic: {tx['domestic']:,} × {tx_cost['domestic']:,.2f} = {round(tx['domestic'] * tx_cost['domestic']):,} AED")
-    md_lines.append(f"   - Cheque: {tx['cheque']:,} × {tx_cost['cheque']:,.2f} = {round(tx['cheque'] * tx_cost['cheque']):,} AED")
-    md_lines.append(f"   - PDC: {user_data['pdc_count']:,} × {user_data['pdc_cost']:,.2f} = {round(user_data['pdc_count'] * user_data['pdc_cost']):,} AED")
-    md_lines.append(f"   - Inward FCY Remittance: {user_data['inward_fcy_count']:,} × {user_data['inward_fcy_cost']:,.2f} = {round(user_data['inward_fcy_count'] * user_data['inward_fcy_cost']):,} AED")
-    total_no_pkg_base_txn_costs = tx['international'] * tx_cost['international'] + \
-                                  tx['domestic'] * tx_cost['domestic'] + \
-                                  tx['cheque'] * tx_cost['cheque'] + \
-                                  user_data['pdc_count'] * user_data['pdc_cost'] + \
-                                  user_data['inward_fcy_count'] * user_data['inward_fcy_cost']
-    # elements.append(Paragraph(f"   - **Total Base Transaction & Service Costs**: {round(total_no_pkg_base_txn_costs):,} AED", normal_style))
-    # elements.append(Spacer(1, 6))
-
-    md_lines.append("\n2. **FX Additional Cost Without Any Package (vs. Best Package)**:")
-    md_lines.append(f"   - FX Additional Cost: {round(fx_additional_cost_no_pkg):,} AED (This is the extra you would have paid in FX by not using the {best} package rate.)")
-    
-    md_lines.append("\n3. **WPS/CST Cost**:")
-    md_lines.append(f"   - WPS/CST Enabled: {'Yes' if user_data['wps_enabled'] else 'No'}")
-    md_lines.append(f"   - WPS/CST Cost: {round(user_data['wps_cost']):,} AED")
-    
-    md_lines.append("\n4. **Other Costs (User Input - No Package)**:")
-    md_lines.append(f"   - Other Costs: {round(user_data['other_costs_input']):,} AED")
-    
-    md_lines.append("\n5. **Total Cost Without Any Package**:")
-    md_lines.append(f"   - Total Cost: {round(no_pkg_total_cost):,} AED")
-    
-    md_lines.append(f"\n6. **Cost With Best Package ({best})**:")
-    md_lines.append(f"   - Package Cost: {packages[best]['cost']:,} AED")
-    md_lines.append("   - Remaining Transactions & Services (Paid): ")
-    
+    # --- Callout Box for Key Drivers ---
+    # Identify key saving drivers
+    key_drivers = []
     pkg_rules = packages[best]
-    for item_type in ["international", "domestic", "cheque", "pdc", "inward_fcy_remittance"]:
-        user_item_count = 0
-        client_item_rate = 0.0
-        if item_type == "international":
-            user_item_count = user_data['int_count']
-            client_item_rate = user_data['int_cost']
-        elif item_type == "domestic":
-            user_item_count = user_data['dom_count']
-            client_item_rate = user_data['dom_cost']
-        elif item_type == "cheque":
-            user_item_count = user_data['chq_count']
-            client_item_rate = user_data['chq_cost']
-        elif item_type == "pdc":
-            user_item_count = user_data['pdc_count']
-            client_item_rate = user_data['pdc_cost']
-        elif item_type == "inward_fcy_remittance":
-            user_item_count = user_data['inward_fcy_count']
-            client_item_rate = user_data['inward_fcy_cost']
-        rule = None
-        if item_type in ["international", "domestic", "cheque"]:
-            rule = pkg_rules["transactions"].get(item_type)
-        else:
-            rule = pkg_rules.get(item_type)
-        paid_count = 0
-        rate_applied = client_item_rate
-        cost_of_paid = 0
-        if rule:
-            free_count = rule.get("free_count", 0)
-            paid_count = max(0, user_item_count - free_count)
-            if paid_count > 0:
-                if rule.get("rate_after_free") is not None:
-                    rate_applied = rule["rate_after_free"]
-                cost_of_paid = paid_count * rate_applied
-        else:
-            paid_count = user_item_count
-            cost_of_paid = paid_count * rate_applied
-        md_lines.append(f"     - {item_type.replace('_', ' ').title()}: {paid_count} × {rate_applied:.2f} = {round(cost_of_paid):,} AED")
-    
-    md_lines.append(f"\n   - FX Additional Cost with Package ({best}): 0 AED (You are using the best package rate)")
-    md_lines.append(f"\n   - WPS/CST Cost: 0 AED")
-    md_lines.append(f"\n   - Other Costs (User Input) with Package ({best}):")
-    if packages[best].get("other_costs_apply_input", False):
-        md_lines.append(f"     - Other Costs Added: {round(user_data['other_costs_input']):,} AED")
-    else:
-        md_lines.append(f"     - Other Costs Included/Free with Package: 0 AED")
-    md_lines.append(f"   - **Total Cost With Best Package**: {round(best_pkg_fees):,} AED")
-    md_lines.append("\n7. **Savings**:")
-    md_lines.append(f"   - Total Cost Without Package - Total Cost With Best Package = **{round(savings):,} AED**")
-    md_lines.append("\n8. **Complimentary Items with this Package**:")
-    complimentary = packages[best].get("complimentary_items", [])
-    if complimentary:
-        for item in complimentary:
-            md_lines.append(f"   - {item}")
-    else:
-        md_lines.append("   - None listed.")
-    calculation_details_md = "\n".join(md_lines)
-    with st.expander("🔍 How We Calculated Your Savings", expanded=False):
-        st.markdown(calculation_details_md, unsafe_allow_html=True)
+    if user_data['int_count'] > pkg_rules['transactions']['international']['free_count']:
+        key_drivers.append("Significant free international transfers")
+    if user_data['fx_amount'] > 0:
+        key_drivers.append("Preferential FX rates")
+    if user_data['pdc_count'] > pkg_rules['pdc']['free_count'] or user_data['inward_fcy_count'] > pkg_rules['inward_fcy_remittance']['free_count']:
+        key_drivers.append("Inclusive PDCs and inward remittances")
+    if not pkg_rules['other_costs_apply_input'] and user_data['other_costs_input'] > 0:
+        key_drivers.append("Waiver of miscellaneous monthly fees")
+    if key_drivers:
+        st.success("**Key Savings Drivers:** " + ", ".join(key_drivers))
 
-    # Graphs and export options
-    if best:
-        # --- Infographic-style smooth area/peak plot for cost comparison ---
-        categories = ["Without Package"] + list(results["results"].keys())
-        costs = [no_pkg_total_cost] + [results["results"][pkg]["total_cost"] for pkg in results["results"]]
-        chart_colors = ['#444', '#1f77b4', '#17becf', '#2ca02c', '#ffbb78', '#ff7f0e', '#d62728']
-        fig = go.Figure()
-        for i, (cat, cost) in enumerate(zip(categories, costs)):
-            x_peak = np.linspace(i-0.4, i+0.4, 50)
-            y_peak = cost * np.exp(-((x_peak - i) ** 2) / 0.04)
-            fig.add_trace(go.Scatter(
-                x=x_peak, y=y_peak,
-                fill='tozeroy',
-                mode='lines',
-                line=dict(color=chart_colors[i % len(chart_colors)], width=2),
-                fillcolor=chart_colors[i % len(chart_colors)],
-                name=cat,
-                showlegend=False
-            ))
-            fig.add_trace(go.Scatter(
-                x=[i], y=[cost],
-                mode='markers+text',
-                marker=dict(size=18, color=chart_colors[i % len(chart_colors)], line=dict(width=2, color='white')),
-                text=[f"{int(cost):,}"],
-                textposition="top center",
-                showlegend=False
-            ))
-        fig.update_xaxes(
-            tickvals=list(range(len(categories))),
-            ticktext=categories,
-            showgrid=False
-        )
-        fig.update_yaxes(title_text="Total Cost (AED)", showgrid=False)
-        fig.update_layout(
-            title="💰 Total Monthly Cost by Option",
-            plot_bgcolor='white',
-            margin=dict(l=40, r=40, t=60, b=40),
-            height=400
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # --- Infographic-style Bar and Donut Charts ---
+    categories = ["Without Package"] + list(results["results"].keys())
+    costs = [no_pkg_cost] + [results["results"][pkg]["total_cost"] for pkg in results["results"]]
+    chart_colors = ['#888', '#e4002b', '#ffbb78', '#1f77b4', '#2ca02c', '#ff7f0e', '#d62728']  # Gray for No Package
+    import plotly.graph_objects as go
+    import numpy as np
+    fig = go.Figure()
+    for i, (cat, cost) in enumerate(zip(categories, costs)):
+        x_peak = np.linspace(i-0.4, i+0.4, 50)
+        y_peak = cost * np.exp(-((x_peak - i) ** 2) / 0.04)
+        fig.add_trace(go.Scatter(
+            x=x_peak, y=y_peak,
+            fill='tozeroy',
+            mode='lines',
+            line=dict(color=chart_colors[i % len(chart_colors)], width=2),
+            fillcolor=chart_colors[i % len(chart_colors)],
+            name=cat,
+            showlegend=False
+        ))
+        badge = " (Best)" if cat == best else ""
+        fig.add_trace(go.Scatter(
+            x=[i], y=[cost],
+            mode='markers+text',
+            marker=dict(size=22, color=chart_colors[i % len(chart_colors)], line=dict(width=2, color='white'), symbol='circle'),
+            text=[f"{int(cost):,}{badge}"],
+            textposition="top center",
+            textfont=dict(size=20, color=chart_colors[i % len(chart_colors)]),
+            showlegend=False
+        ))
+    fig.update_xaxes(
+        tickvals=list(range(len(categories))),
+        ticktext=categories,
+        showgrid=False,
+        zeroline=False,
+        showline=False,
+        title=None,
+        mirror=False,
+        linecolor='#fff',
+        gridcolor='#fff',
+    )
+    fig.update_yaxes(title_text="Total Cost (AED)", showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff')
+    fig.update_layout(
+        title="💰 Total Monthly Cost by Option",
+        plot_bgcolor='#fff',
+        paper_bgcolor='#fff',
+        font=dict(size=18),
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=420
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-        # Graph 2: Savings Comparison and Pie Chart
-        with st.container():
-            col1, col2 = st.columns([2, 1], gap="large")
-            with col1:
-                st.markdown("### 💸 Net Financial Impact by Package")
-                df_savings = pd.DataFrame({
-                    "Package": list(results["results"].keys()),
-                    "Savings (AED)": [results["results"][pkg]["savings"] for pkg in results["results"]],
-                })
-                fig_savings = px.bar(df_savings, x="Package", y="Savings (AED)", 
-                                     title=None,
-                                     text_auto=',.0f',
-                                     color="Package")
-                fig_savings.update_layout(
-                    width=800,
-                    height=500,
-                    margin=dict(l=20, r=20, t=20, b=80),
-                    plot_bgcolor='white',
-                    bargap=0.3,
-                    bargroupgap=0.1,
-                    font=dict(size=16),
-                    legend=dict(
-                        orientation="h",
-                        yanchor="top",
-                        y=-0.25,
-                        xanchor="center",
-                        x=0.5,
-                        font=dict(size=13),
-                        bgcolor='rgba(0,0,0,0)',
-                        bordercolor='rgba(0,0,0,0)'
-                    ),
-                )
-                fig_savings.update_traces(
-                    textfont_size=18,
+    # Bar and Donut side by side
+    with st.container():
+        col1, col2 = st.columns([2, 1], gap="large")
+        with col1:
+            st.markdown('<br>', unsafe_allow_html=True)
+            st.markdown("### 💸 Net Financial Impact by Package")
+            import pandas as pd
+            df_savings = pd.DataFrame({
+                "Package": list(results["results"].keys()),
+                "Savings (AED)": [results["results"][pkg]["savings"] for pkg in results["results"]],
+            })
+            bar_colors = ['#e4002b', '#ffbb78', '#1f77b4', '#2ca02c', '#ff7f0e', '#d62728']
+            fig_savings = go.Figure()
+            for i, row in df_savings.iterrows():
+                badge = " (Best)" if row["Package"] == best else ""
+                color = '#888' if row["Package"] == "No Package" else bar_colors[i % len(bar_colors)]
+                fig_savings.add_trace(go.Bar(
+                    x=[row["Package"]],
+                    y=[row["Savings (AED)"]],
+                    marker=dict(
+                        color=color,
+                        line=dict(width=2, color='#fff'),
+                        ),
+                    text=[f"{row['Savings (AED)']:,.0f}{badge}"],
                     textposition='outside',
-                    textangle=0
-                )
-                st.plotly_chart(fig_savings, use_container_width=True)
-            with col2:
-                st.markdown(f"### 🥧 {best} Savings Breakdown")
-                # Calculate savings components
-                no_pkg = results["results"].get("No Package", None)
-                best_pkg = results["results"][best]
-                user_data = results["user_data"]
-                if no_pkg:
-                    no_pkg_breakdown = no_pkg["breakdown"]
-                else:
-                    no_pkg_breakdown = {
-                        "International Transactions Cost": user_data["int_count"] * user_data["int_cost"],
-                        "Domestic Transactions Cost": user_data["dom_count"] * user_data["dom_cost"],
-                        "Cheque Transactions Cost": user_data["chq_count"] * user_data["chq_cost"],
-                        "Pdc Cost": user_data["pdc_count"] * user_data["pdc_cost"],
-                        "Inward Fcy Remittance Cost": user_data["inward_fcy_count"] * user_data["inward_fcy_cost"],
-                        "FX Additional Cost": user_data["fx_amount"] * user_data["client_fx_rate"] if user_data["fx_amount"] > 0 else 0,
-                        "Other Costs (User Input)": user_data.get("other_costs_input", 0)
-                    }
-                best_pkg_breakdown = best_pkg["breakdown"]
-
-                # Calculate savings per component (ensure all relevant breakups are included)
-                savings_components = {}
-                # FX Savings
-                fx_saving = no_pkg_breakdown.get("FX Additional Cost", 0) - best_pkg_breakdown.get("FX Additional Cost", 0)
-                if abs(fx_saving) > 1e-2:
-                    savings_components["FX Savings"] = fx_saving
-                # International Transaction Savings
-                int_saving = no_pkg_breakdown.get("International Transactions Cost", 0) - best_pkg_breakdown.get("International Transactions Cost", 0)
-                if abs(int_saving) > 1e-2:
-                    savings_components["International Txn Savings"] = int_saving
-                # Domestic Transaction Savings
-                dom_saving = no_pkg_breakdown.get("Domestic Transactions Cost", 0) - best_pkg_breakdown.get("Domestic Transactions Cost", 0)
-                if abs(dom_saving) > 1e-2:
-                    savings_components["Domestic Txn Savings"] = dom_saving
-                # Cheque Savings
-                chq_saving = no_pkg_breakdown.get("Cheque Transactions Cost", 0) - best_pkg_breakdown.get("Cheque Transactions Cost", 0)
-                if abs(chq_saving) > 1e-2:
-                    savings_components["Cheque Savings"] = chq_saving
-                # PDC Savings
-                pdc_saving = no_pkg_breakdown.get("Pdc Cost", 0) - best_pkg_breakdown.get("Pdc Cost", 0)
-                if abs(pdc_saving) > 1e-2:
-                    savings_components["PDC Savings"] = pdc_saving
-                # Inward FCY Savings
-                inward_fcy_saving = no_pkg_breakdown.get("Inward Fcy Remittance Cost", 0) - best_pkg_breakdown.get("Inward Fcy Remittance Cost", 0)
-                if abs(inward_fcy_saving) > 1e-2:
-                    savings_components["Inward FCY Savings"] = inward_fcy_saving
-                # Other savings
-                other_saving = no_pkg_breakdown.get("Other Costs (User Input)", 0) - best_pkg_breakdown.get("Other Costs (User Input)", 0)
-                if abs(other_saving) > 1e-2:
-                    savings_components["Other Savings"] = other_saving
-
-                # Prepare data for pie chart
-                pie_labels = list(savings_components.keys())
-                pie_values = [abs(v) for v in savings_components.values()]
-
-                import plotly.express as px
-                fig_pie = px.pie(
-                    names=pie_labels,
-                    values=pie_values,
-                    hole=0.55,
-                    title=None,
-                    color_discrete_sequence=px.colors.sequential.RdBu
-                )
-                fig_pie.update_traces(textinfo='percent+label', pull=[0.05]*len(pie_labels), marker=dict(line=dict(color='#fff', width=2)))
-                fig_pie.update_layout(
-                    showlegend=False,
-                    annotations=[dict(text='Savings', x=0.5, y=0.5, font_size=20, showarrow=False)],
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    width=280,
-                    height=280
-                )
-                st.plotly_chart(fig_pie, use_container_width=False)
-
-        # What-If Analysis section
-        with st.expander("🤔 Interactive What-If Analysis", expanded=False):
-            st.markdown("Use the sliders to see how your savings change with different transaction volumes.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                max_int = int(user_data['int_count'] * 2.5) + 10
-                what_if_int_count = st.slider("International Transfers", 0, max_int, user_data['int_count'])
-                
-                max_pdc = int(user_data['pdc_count'] * 2.5) + 10
-                what_if_pdc_count = st.slider("PDCs Processed", 0, max_pdc, user_data['pdc_count'])
-
-            with col2:
-                max_fx = int(user_data['fx_amount'] * 2.5) + 5000
-                what_if_fx_amount = st.slider("FX Amount (USD)", 0.0, float(max_fx), float(user_data['fx_amount']))
-
-                max_dom = int(user_data['dom_count'] * 2.5) + 10
-                what_if_dom_count = st.slider("Domestic Transfers", 0, max_dom, user_data['dom_count'])
-
-            # Prepare new inputs for re-calculation
-            what_if_tx = tx.copy()
-            what_if_tx['international'] = what_if_int_count
-            what_if_tx['domestic'] = what_if_dom_count
-            what_if_tx['pdc'] = what_if_pdc_count
-            
-            # Re-run the analysis with the slider values
-            best_wi, savings_wi, results_wi, no_pkg_cost_wi = suggest_best_package(
-                what_if_tx, tx_cost, what_if_fx_amount, user_data["fx_direction"],
-                user_data["client_fx_rate"], user_data["wps_cost"], user_data["other_costs_input"]
+                    width=0.5,
+                    name=row["Package"]
+                ))
+            fig_savings.update_layout(
+                width=800,
+                height=500,
+                margin=dict(l=20, r=20, t=20, b=80),
+                plot_bgcolor='#fff',
+                paper_bgcolor='#fff',
+                bargap=0.3,
+                bargroupgap=0.1,
+                font=dict(size=16),
+                showlegend=False,
+                xaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
+                yaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
             )
-
-            st.markdown("---")
-            if best_wi:
-                st.success(f"With these new values, **{best_wi}** would be the best package, saving you **{round(savings_wi):,} AED**.")
+            st.plotly_chart(fig_savings, use_container_width=True)
+        with col2:
+            st.markdown('<br>', unsafe_allow_html=True)
+            # st.markdown(f"### 🥇 {best} Savings Breakdown")
+            st.markdown(f"### 🥇 Savings Overview")
+            # Calculate savings components
+            no_pkg = results["results"].get("No Package", None)
+            best_pkg = results["results"][best]
+            if no_pkg:
+                no_pkg_breakdown = no_pkg["breakdown"]
             else:
-                st.warning("With these values, no package offers savings over the client's current costs.")
+                no_pkg_breakdown = {
+                    "International Transactions Cost": user_data["int_count"] * user_data["int_cost"],
+                    "Domestic Transactions Cost": user_data["dom_count"] * user_data["dom_cost"],
+                    "Cheque Transactions Cost": user_data["chq_count"] * user_data["chq_cost"],
+                    "Pdc Cost": user_data["pdc_count"] * user_data["pdc_cost"],
+                    "Inward Fcy Remittance Cost": user_data["inward_fcy_count"] * user_data["inward_fcy_cost"],
+                    "FX Additional Cost": user_data["fx_amount"] * user_data["client_fx_rate"] if user_data["fx_amount"] > 0 else 0,
+                    "Other Costs (User Input)": user_data.get("other_costs_input", 0)
+                }
+            best_pkg_breakdown = best_pkg["breakdown"]
+            savings_components = {}
+            fx_saving = no_pkg_breakdown.get("FX Additional Cost", 0) - best_pkg_breakdown.get("FX Additional Cost", 0)
+            if abs(fx_saving) > 1e-2:
+                savings_components["FX Savings"] = fx_saving
+            int_saving = no_pkg_breakdown.get("International Transactions Cost", 0) - best_pkg_breakdown.get("International Transactions Cost", 0)
+            if abs(int_saving) > 1e-2:
+                savings_components["International Txn Savings"] = int_saving
+            dom_saving = no_pkg_breakdown.get("Domestic Transactions Cost", 0) - best_pkg_breakdown.get("Domestic Transactions Cost", 0)
+            if abs(dom_saving) > 1e-2:
+                savings_components["Domestic Txn Savings"] = dom_saving
+            chq_saving = no_pkg_breakdown.get("Cheque Transactions Cost", 0) - best_pkg_breakdown.get("Cheque Transactions Cost", 0)
+            if abs(chq_saving) > 1e-2:
+                savings_components["Cheque Savings"] = chq_saving
+            pdc_saving = no_pkg_breakdown.get("Pdc Cost", 0) - best_pkg_breakdown.get("Pdc Cost", 0)
+            if abs(pdc_saving) > 1e-2:
+                savings_components["PDC Savings"] = pdc_saving
+            inward_fcy_saving = no_pkg_breakdown.get("Inward Fcy Remittance Cost", 0) - best_pkg_breakdown.get("Inward Fcy Remittance Cost", 0)
+            if abs(inward_fcy_saving) > 1e-2:
+                savings_components["Inward FCY Savings"] = inward_fcy_saving
+            other_saving = no_pkg_breakdown.get("Other Costs (User Input)", 0) - best_pkg_breakdown.get("Other Costs (User Input)", 0)
+            if abs(other_saving) > 1e-2:
+                savings_components["Other Savings"] = other_saving
+            # Shorten/clarify labels for bar chart
+            label_map = {
+                "FX Savings": "FX",
+                "International Txn Savings": "Intl",
+                "Domestic Txn Savings": "Dom",
+                "Cheque Savings": "Chq",
+                "PDC Savings": "PDC",
+                "Inward FCY Savings": "FCY",
+                "Other Savings": "Other"
+            }
+            bar_labels = [label_map.get(lbl, lbl) for lbl in savings_components.keys()]
+            bar_values = [abs(v) for v in savings_components.values()]
+            bar_colors = ['#e4002b', '#ffbb78', '#1f77b4', '#2ca02c', '#ff7f0e', '#d62728'][:len(bar_labels)]
+            fig_bar = go.Figure(go.Bar(
+                x=bar_values,
+                y=bar_labels,
+                orientation='h',
+                marker=dict(
+                    color=bar_colors,
+                    line=dict(color='#fff', width=2)
+                ),
+                text=[f"{v:,.0f} AED" for v in bar_values],
+                textposition='outside'
+            ))
+            fig_bar.update_layout(
+                title=f"{best} Savings Breakdown",
+                xaxis_title="Savings (AED)",
+                yaxis_title="Component",
+                plot_bgcolor='#fff',
+                paper_bgcolor='#fff',
+                margin=dict(l=10, r=10, t=40, b=10),
+                width=600,
+                height=500,
+            )
+            st.plotly_chart(fig_bar)
 
-            # Re-draw the charts for the what-if scenario
-            # For what-if, recalculate the FX Additional Cost for the new best package
-            best_pkg_breakdown_wi = results_wi[best_wi]['breakdown'] if best_wi else {}
-            # For what-if, no_pkg_cost_wi is the baseline (no FX Additional Cost)
-            displayed_no_pkg_cost_wi = no_pkg_cost_wi
-            df_cost_wi = pd.DataFrame({
-                "Category": ["Without Package"] + list(results_wi.keys()),
-                "Cost (AED)": [displayed_no_pkg_cost_wi] + [r["total_cost"] for r in results_wi.values()],
-            })
-            fig_cost_wi = px.bar(df_cost_wi, x="Category", y="Cost (AED)", title="💰 What-If: Total Cost",
-                                 color="Category", text_auto=',.0f')
-            st.plotly_chart(fig_cost_wi, use_container_width=True)
-            
-            df_savings_wi = pd.DataFrame({
-                "Package": list(results_wi.keys()),
-                "Savings (AED)": [r["savings"] for r in results_wi.values()],
-            })
-            fig_savings_wi = px.bar(df_savings_wi, x="Package", y="Savings (AED)", title="💸 What-If: Savings",
-                                 color="Package", text_auto=',.0f')
-            
-            st.plotly_chart(fig_savings_wi, use_container_width=True)
+    # --- Export Options ---
+    st.markdown("### 📤 Export Results")
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = export_to_csv(results["results"], user_data, best, savings, no_pkg_cost)
+        st.download_button("📥 Export to CSV", data=csv, file_name="package_comparison.csv", mime="text/csv")
+    with col2:
+        pdf_bytes = export_to_pdf(results["results"], user_data, best, savings, no_pkg_cost, results.get("narrative_summary", ""))
+        st.download_button("📄 Export to PDF", data=pdf_bytes, file_name="package_comparison.pdf", mime="application/pdf")
 
-        # Export Options
-        st.markdown("### 📤 Export Results")
+    # --- What-If Analysis section ---
+    with st.expander("🤔 Interactive What-If Analysis", expanded=False):
+        st.markdown("Use the sliders to see how your savings change with different transaction volumes.")
+        
         col1, col2 = st.columns(2)
         with col1:
-            csv = export_to_csv(results["results"], user_data, best, savings, no_pkg_cost)
-            st.download_button("📥 Export to CSV", data=csv, file_name="package_comparison.csv", mime="text/csv")
+            max_int = int(user_data['int_count'] * 2.5) + 10
+            what_if_int_count = st.slider("International Transfers", 0, max_int, user_data['int_count'])
+            
+            max_pdc = int(user_data['pdc_count'] * 2.5) + 10
+            what_if_pdc_count = st.slider("PDCs Processed", 0, max_pdc, user_data['pdc_count'])
+
         with col2:
-            pdf_bytes = export_to_pdf(results["results"], user_data, best, savings, no_pkg_cost, results.get("narrative_summary", ""))
-            st.download_button("📄 Export to PDF", data=pdf_bytes, file_name="package_comparison.pdf", mime="application/pdf")
+            max_fx = int(user_data['fx_amount'] * 2.5) + 5000
+            what_if_fx_amount = st.slider("FX Amount (USD)", 0.0, float(max_fx), float(user_data['fx_amount']))
+
+            max_dom = int(user_data['dom_count'] * 2.5) + 10
+            what_if_dom_count = st.slider("Domestic Transfers", 0, max_dom, user_data['dom_count'])
+
+        # Prepare new inputs for re-calculation
+        what_if_tx = tx.copy()
+        what_if_tx['international'] = what_if_int_count
+        what_if_tx['domestic'] = what_if_dom_count
+        what_if_tx['pdc'] = what_if_pdc_count
+        
+        # Re-run the analysis with the slider values
+        best_wi, savings_wi, results_wi, no_pkg_cost_wi = suggest_best_package(
+            what_if_tx, tx_cost, what_if_fx_amount, user_data["fx_direction"],
+            user_data["client_fx_rate"], user_data["wps_cost"], user_data["other_costs_input"]
+        )
+
+        st.markdown("---")
+        if best_wi:
+            st.success(f"With these new values, **{best_wi}** would be the best package, saving you **{round(savings_wi):,} AED**.")
+        else:
+            st.warning("With these values, no package offers savings over the client's current costs.")
+
+        # Re-draw the charts for the what-if scenario
+        import pandas as pd
+        df_cost_wi = pd.DataFrame({
+            "Category": ["Without Package"] + list(results_wi.keys()),
+            "Cost (AED)": [no_pkg_cost_wi] + [r["total_cost"] for r in results_wi.values()],
+        })
+        import plotly.express as px
+        fig_cost_wi = px.bar(df_cost_wi, x="Category", y="Cost (AED)", title="💰 What-If: Total Cost",
+                             color="Category", text_auto=',.0f')
+        fig_cost_wi.update_layout(
+            plot_bgcolor='#fff',
+            paper_bgcolor='#fff',
+            font=dict(size=16),
+            margin=dict(l=20, r=20, t=40, b=40),
+            xaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
+            yaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
+        )
+        st.plotly_chart(fig_cost_wi, use_container_width=True)
+        
+        df_savings_wi = pd.DataFrame({
+            "Package": list(results_wi.keys()),
+            "Savings (AED)": [r["savings"] for r in results_wi.values()],
+        })
+        fig_savings_wi = px.bar(df_savings_wi, x="Package", y="Savings (AED)", title="💸 What-If: Savings",
+                             color="Package", text_auto=',.0f')
+        fig_savings_wi.update_layout(
+            plot_bgcolor='#fff',
+            paper_bgcolor='#fff',
+            font=dict(size=16),
+            margin=dict(l=20, r=20, t=40, b=40),
+            xaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
+            yaxis=dict(showgrid=False, zeroline=False, showline=False, linecolor='#fff', gridcolor='#fff'),
+        )
+        st.plotly_chart(fig_savings_wi, use_container_width=True)
+        # What-If Horizontal Bar Chart for Savings Breakdown
+        # Calculate what-if savings components
+        no_pkg_wi = results_wi.get("No Package", None)
+        best_pkg_wi = results_wi[best_wi] if best_wi else None
+        if best_pkg_wi:
+            if no_pkg_wi:
+                no_pkg_breakdown_wi = no_pkg_wi["breakdown"]
+            else:
+                no_pkg_breakdown_wi = {
+                    "International Transactions Cost": what_if_tx["international"] * tx_cost["international"],
+                    "Domestic Transactions Cost": what_if_tx["domestic"] * tx_cost["domestic"],
+                    "Cheque Transactions Cost": what_if_tx["cheque"] * tx_cost["cheque"],
+                    "Pdc Cost": what_if_tx["pdc"] * tx_cost["pdc"],
+                    "Inward Fcy Remittance Cost": what_if_tx["inward_fcy_remittance"] * tx_cost["inward_fcy_remittance"],
+                    "FX Additional Cost": what_if_fx_amount * user_data["client_fx_rate"] if what_if_fx_amount > 0 else 0,
+                    "Other Costs (User Input)": user_data.get("other_costs_input", 0)
+                }
+            best_pkg_breakdown_wi = best_pkg_wi["breakdown"]
+            savings_components_wi = {}
+            fx_saving_wi = no_pkg_breakdown_wi.get("FX Additional Cost", 0) - best_pkg_breakdown_wi.get("FX Additional Cost", 0)
+            if abs(fx_saving_wi) > 1e-2:
+                savings_components_wi["FX Savings"] = fx_saving_wi
+            int_saving_wi = no_pkg_breakdown_wi.get("International Transactions Cost", 0) - best_pkg_breakdown_wi.get("International Transactions Cost", 0)
+            if abs(int_saving_wi) > 1e-2:
+                savings_components_wi["International Txn Savings"] = int_saving_wi
+            dom_saving_wi = no_pkg_breakdown_wi.get("Domestic Transactions Cost", 0) - best_pkg_breakdown_wi.get("Domestic Transactions Cost", 0)
+            if abs(dom_saving_wi) > 1e-2:
+                savings_components_wi["Domestic Txn Savings"] = dom_saving_wi
+            chq_saving_wi = no_pkg_breakdown_wi.get("Cheque Transactions Cost", 0) - best_pkg_breakdown_wi.get("Cheque Transactions Cost", 0)
+            if abs(chq_saving_wi) > 1e-2:
+                savings_components_wi["Cheque Savings"] = chq_saving_wi
+            pdc_saving_wi = no_pkg_breakdown_wi.get("Pdc Cost", 0) - best_pkg_breakdown_wi.get("Pdc Cost", 0)
+            if abs(pdc_saving_wi) > 1e-2:
+                savings_components_wi["PDC Savings"] = pdc_saving_wi
+            inward_fcy_saving_wi = no_pkg_breakdown_wi.get("Inward Fcy Remittance Cost", 0) - best_pkg_breakdown_wi.get("Inward Fcy Remittance Cost", 0)
+            if abs(inward_fcy_saving_wi) > 1e-2:
+                savings_components_wi["Inward FCY Savings"] = inward_fcy_saving_wi
+            other_saving_wi = no_pkg_breakdown_wi.get("Other Costs (User Input)", 0) - best_pkg_breakdown_wi.get("Other Costs (User Input)", 0)
+            if abs(other_saving_wi) > 1e-2:
+                savings_components_wi["Other Savings"] = other_saving_wi
+            # Shorten/clarify labels for bar chart
+            label_map_wi = {
+                "FX Savings": "FX",
+                "International Txn Savings": "Intl",
+                "Domestic Txn Savings": "Dom",
+                "Cheque Savings": "Chq",
+                "PDC Savings": "PDC",
+                "Inward FCY Savings": "FCY",
+                "Other Savings": "Other"
+            }
+            bar_labels_wi = [label_map_wi.get(lbl, lbl) for lbl in savings_components_wi.keys()]
+            bar_values_wi = [abs(v) for v in savings_components_wi.values()]
+            bar_colors_wi = ['#e4002b', '#ffbb78', '#1f77b4', '#2ca02c', '#ff7f0e', '#d62728'][:len(bar_labels_wi)]
+            fig_bar_wi = go.Figure(go.Bar(
+                x=bar_values_wi,
+                y=bar_labels_wi,
+                orientation='h',
+                marker=dict(
+                    color=bar_colors_wi,
+                    line=dict(color='#fff', width=2)
+                ),
+                text=[f"{v:,.0f} AED" for v in bar_values_wi],
+                textposition='outside'
+            ))
+            # fig_bar_wi.update_layout(
+            #     title=f"{best_wi} Savings Breakdown (What-If)",
+            #     xaxis_title="Savings (AED)",
+            #     yaxis_title="Component",
+            #     plot_bgcolor='#fff',
+            #     paper_bgcolor='#fff',
+            #     margin=dict(l=10, r=10, t=40, b=10),
+            #     width=600,
+            #     height=340,
+            # )
+            # st.plotly_chart(fig_bar_wi)
+
+# Show analysis results in main area if available
+if st.session_state.submitted and "analysis_results" in st.session_state:
+    show_analysis_results(st.session_state.analysis_results)
