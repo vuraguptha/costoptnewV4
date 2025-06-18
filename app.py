@@ -1207,7 +1207,7 @@ def apply_custom_css():
         [data-testid="stSidebar"] {{
             min-width: 320px !important;
             max-width: 450px !important;
-            width: 350px !important;
+            width: 370px !important;
         }}
     </style>
     """, unsafe_allow_html=True)
