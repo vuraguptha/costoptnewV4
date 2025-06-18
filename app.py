@@ -1180,6 +1180,16 @@ def check_password():
 if not check_password():
     st.stop()
 
+# --- Robust manual form reset logic: place this at the very top of your script, before any widgets ---
+if 'manual_reset_pending' in st.session_state and st.session_state.manual_reset_pending:
+    for key, default_value in manual_fields.items():
+        st.session_state[key] = default_value
+    st.session_state.show_welcome = True
+    st.session_state.submitted = False
+    if 'analysis_results' in st.session_state:
+        del st.session_state.analysis_results
+    st.session_state.manual_reset_pending = False
+    st.rerun()
 
 # -------------------- UI RENDER STARTS HERE --------------------
 
@@ -1205,9 +1215,7 @@ def apply_custom_css():
         }}
         /* Fixed sidebar width */
         [data-testid="stSidebar"] {{
-            min-width: 320px !important;
-            max-width: 450px !important;
-            width: 370px !important;
+            width: 450px !important;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -1230,7 +1238,7 @@ def apply_custom_css():
                 background-size: 70%;
                 background-repeat: no-repeat;
                 background-position: center 20px;
-                opacity: 0.12;
+                opacity: 0.1;
                 z-index: -1;
                 pointer-events: none;
             }}
@@ -1260,7 +1268,7 @@ with col2:
 with st.sidebar:
     # New descriptive text at the top
     st.markdown("""
-    <p style="color: #e60013; font-size: 16px; line-height: 1.6; text-align: justify; margin-left: 14px;">
+    <p style="color: #e60013; font-size: 20px; line-height: 1.6; text-align: justify; margin-left: 14px;">
         <strong><em>
             &nbsp;&nbsp;&nbsp;&nbsp;An intelligent, AI-driven pricing solution that empowers your team to confidently 
             propose the optimal Business First Package. Powered by advanced analytics and a deep evaluation of each client's 
@@ -1424,6 +1432,12 @@ with st.sidebar:
                     st.warning("No suitable package found or an error occurred during analysis.")
                     if "analysis_results" in st.session_state: del st.session_state.analysis_results
                     st.session_state.submitted = False
+
+        # Show Reset button only after analysis/results are shown
+        if st.session_state.submitted and "analysis_results" in st.session_state:
+            if st.button("🔄 Reset", use_container_width=True, key="manual_reset_button_after_analysis"):
+                st.session_state.manual_reset_pending = True
+                st.rerun()
 
     elif st.session_state.input_mode == "AI Assistant":
         st.markdown("### 💬 AI Assistant") # Title for AI assistant mode
