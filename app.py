@@ -1205,7 +1205,9 @@ def apply_custom_css():
         }}
         /* Fixed sidebar width */
         [data-testid="stSidebar"] {{
-            width: 450px !important;
+            min-width: 320px !important;
+            max-width: 450px !important;
+            width: 350px !important;
         }}
     </style>
     """, unsafe_allow_html=True)
