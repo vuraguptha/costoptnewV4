@@ -1230,7 +1230,7 @@ def apply_custom_css():
                 background-size: 70%;
                 background-repeat: no-repeat;
                 background-position: center 20px;
-                opacity: 0.1;
+                opacity: 0.12;
                 z-index: -1;
                 pointer-events: none;
             }}
@@ -1260,7 +1260,7 @@ with col2:
 with st.sidebar:
     # New descriptive text at the top
     st.markdown("""
-    <p style="color: #e60013; font-size: 20px; line-height: 1.6; text-align: justify; margin-left: 14px;">
+    <p style="color: #e60013; font-size: 16px; line-height: 1.6; text-align: justify; margin-left: 14px;">
         <strong><em>
             &nbsp;&nbsp;&nbsp;&nbsp;An intelligent, AI-driven pricing solution that empowers your team to confidently 
             propose the optimal Business First Package. Powered by advanced analytics and a deep evaluation of each client's 
