@@ -13,3 +13,4 @@ openai>=1.0.0
 reportlab>=3.6.0
 gTTS>=2.3.0
 matplotlib
+pyttsx3
