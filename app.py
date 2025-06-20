@@ -44,18 +44,22 @@ def play_text_as_speech(text_to_speak):
         st.warning(f"Could not play speech (lang: {selected_language}): {e}")
 
 # -------------------- UI CONFIG & APP NAMING --------------------
-st.set_page_config(page_title="Takhfīd Genie", layout="wide", page_icon="🧞‍♂️")
-APP_TITLE = "Takhfīd Genie"
-APP_SUBTITLE = "Your AI-Powered Business First Package Pricing Expert."
+APP_TITLE = "Fikra Genie"
+APP_SUBTITLE = "Your AI-Powered Business First Package Pricing Expert"
+st.set_page_config(page_title="Fikra Genie", layout="wide", page_icon="🧞‍♂️")
 MAIN_APP_IMAGE_FILENAME = "takhfid_genie_image.png"
-ADCB_LOGO_FILENAME = "adcb_logo.png" # Provide this in the script directory
-WATERMARK_IMAGE_FILENAME = "adcb_watermark.png" # Provide this in the script directory
+ADCB_LOGO_FILENAME = "adcb_logo.png"  # ADCB logo file
+WATERMARK_IMAGE_FILENAME = "adcb_watermark.png"
 
-# Construct absolute paths to the images
+# Directory setup
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MAIN_APP_IMAGE_PATH = os.path.join(SCRIPT_DIR, MAIN_APP_IMAGE_FILENAME)
 ADCB_LOGO_PATH = os.path.join(SCRIPT_DIR, ADCB_LOGO_FILENAME)
 WATERMARK_IMAGE_PATH = os.path.join(SCRIPT_DIR, WATERMARK_IMAGE_FILENAME)
+
+# At the top with other constants
+# WATERMARK_IMAGE_PATH = "sidebar_logo.png"
+# ADCB_LOGO_PATH = "sidebar_logo.png"  # Using the same logo for now, you can replace with actual ADCB logo later
 
 # -------------------- PACKAGE CONFIG --------------------
 packages = {
@@ -1157,25 +1161,52 @@ if "chat_stage" not in st.session_state:
 
 # --- Authentication Logic ---
 def check_password():
-    """Returns `True` if the user is authenticated, `False` otherwise."""
-    if st.session_state.get("authenticated", False):
-        return True
+    """Returns `True` if the user had the correct password."""
 
-    st.title("Takhfīd Genie 🧞‍♂️ - Login")
-    st.markdown("Please enter the password to access the application.")
-    
-    password = st.text_input("Password", type="password", key="password_input")
-
-    if st.button("Login", key="login_button"):
-        # The password is now managed in .streamlit/secrets.toml
-        correct_password = st.secrets["APP_PASSWORD"]
-        if password == correct_password:
-            st.session_state["authenticated"] = True
-            st.rerun()
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
         else:
-            st.error("The password you entered is incorrect.")
-            
-    return False
+            st.session_state["password_correct"] = False
+            st.error("Incorrect password. Please try again.")
+
+    # Initialize session state
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+        
+    # First run, show input for password
+    if not st.session_state["password_correct"]:
+        # Convert logo to base64
+        adcb_logo_base64 = img_to_base64(ADCB_LOGO_PATH)
+        
+        # Use direct title with custom styling and ADCB logo
+        st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 1rem;">
+                <h1 style="color: #e4002b; font-size: 4rem; font-weight: 700; margin: 0;">
+                    Fikra Genie 🧞‍♂️💡 - Login
+                </h1>
+                <img src="data:image/png;base64,{adcb_logo_base64}" style="height: 80px; object-fit: contain;" alt="ADCB Logo">
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+            <h2 style="font-size: 2rem; margin-bottom: 1rem;">
+                Please enter the password to access the application.
+            </h2>
+        """, unsafe_allow_html=True)
+        
+        # Password input and login button
+        password = st.text_input("Password", type="password", key="password")
+        if st.button("Login", type="primary"):
+            if password == st.secrets["APP_PASSWORD"]:
+                st.session_state["password_correct"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password. Please try again.")
+        return False
+    
+    return True
 
 # If not authenticated, show login and stop the app from running further.
 if not check_password():
@@ -1203,10 +1234,31 @@ def apply_custom_css():
     <style>
         /* Main Title Styles */
         .main-title {{
-            font-size: 4rem !important;
+            font-size: 6rem !important;  /* Increased from 4rem to 6rem */
             font-weight: 700;
             color: #e4002b; /* ADCB Red */
             text-align: left;
+            margin-bottom: 0.5rem;  /* Added margin for better spacing */
+            line-height: 1.2;  /* Added for better line height */
+        }}
+        /* Login Title Styles */
+        .login-title {{
+            color: #e4002b !important;  /* ADCB Red */
+            font-size: 3rem !important;
+            font-weight: 700 !important;
+            margin-bottom: 2rem !important;
+        }}
+        /* Additional Login Title Style to ensure color override */
+        [data-testid="stMarkdownContainer"] h1 {{
+            color: #e4002b !important;
+        }}
+        /* Welcome Image Styles */
+        .welcome-image {{
+            max-width: 200px;  /* Adjust this value to control image size */
+            width: 90%;
+            height: auto;
+            margin: 2rem auto;
+            display: block;
         }}
         .sub-title {{
             font-size: 1.25rem;
@@ -1217,6 +1269,10 @@ def apply_custom_css():
         /* Fixed sidebar width */
         [data-testid="stSidebar"] {{
             width: 450px !important;
+        }}
+        /* Change sidebar font size */
+        [data-testid="stSidebar"] * {{
+            font-size: 1.3rem !important;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -1239,7 +1295,7 @@ def apply_custom_css():
                 background-size: 70%;
                 background-repeat: no-repeat;
                 background-position: center 20px;
-                opacity: 0.1;
+                opacity: 0;
                 z-index: -1;
                 pointer-events: none;
             }}
@@ -1620,7 +1676,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
         
         with col1:
             # Cost comparison graph (60% width)
-            st.markdown("### 💰 Total Monthly Cost by Option")
+            st.markdown("### 💰 Total Monthly Banking Services Cost")
             # Create sorted data - "Without Package" first, then packages sorted by cost (ascending, but 'Without Package' always first)
             no_package_cost = no_pkg_total_cost
             package_costs = [(name, results["results"][name]["total_cost"]) for name in results["results"].keys()]
@@ -1651,7 +1707,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             })
             # Create the bar chart
             import plotly.express as px
-            fig_cost = px.bar(df_cost, x="Category", y="Cost (AED)", 
+            fig_cost = px.bar(df_cost, x="Category", y="Cost (AED)",
                               color="Category", text_auto=',.0f', color_discrete_sequence=bar_colors)
             # Remove legend, y-axis label, grid lines, and undefined title; keep slight bar gap
             fig_cost.update_layout(
@@ -1811,102 +1867,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        with col2:
-            # Visually appealing HTML card for 'Without Package'
-            st.markdown(f'''
-<div style="background: #f8fafd; border: 2px solid #e4002b; border-radius: 18px; padding: 32px 36px 28px 36px; margin-bottom: 32px; font-family: 'Consolas', 'Menlo', 'Monaco', 'monospace'; font-size: 1.15rem; color: #222; box-shadow: 0 4px 24px 0 rgba(228,0,43,0.07); max-width: 700px;">
-    <div style="font-size:1.3rem; font-weight:700; color:#e4002b; margin-bottom:18px; letter-spacing:1px;">
-        🧾 Cost Breakdown (Without Package)
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#1f77b4; font-size:1.1em;">📁 Transaction Costs</span><br>
-        &emsp;├─ <b>International</b> : {tx['international']:,} × {tx_cost['international']:,.2f} = <b style="color:#e4002b;">{round(tx['international'] * tx_cost['international']):,} AED</b><br>
-        &emsp;├─ <b>Domestic</b>      : {tx['domestic']:,} × {tx_cost['domestic']:,.2f} = {round(tx['domestic'] * tx_cost['domestic']):,} AED<br>
-        &emsp;├─ <b>Cheque</b>        : {tx['cheque']:,} × {tx_cost['cheque']:,.2f} = {round(tx['cheque'] * tx_cost['cheque']):,} AED<br>
-        &emsp;├─ <b>PDC</b>           : {user_data['pdc_count']:,} × {user_data['pdc_cost']:,.2f} = {round(user_data['pdc_count'] * user_data['pdc_cost']):,} AED<br>
-        &emsp;└─ <b>Inward FCY</b>    : {user_data['inward_fcy_count']:,} × {user_data['inward_fcy_cost']:,.2f} = {round(user_data['inward_fcy_count'] * user_data['inward_fcy_cost']):,} AED
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#228B22; font-size:1.1em;">🪙 FX Additional Cost</span><br>
-        &emsp;└─ Compared to <b>{best}</b> Package Rate = <b style="color:#e4002b;">{round(fx_additional_cost_no_pkg):,} AED</b>
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#ff9900; font-size:1.1em;">🛠️ Other Costs</span><br>
-        &emsp;├─ WPS / CST      = {round(user_data['wps_cost']):,} AED<br>
-        &emsp;└─ Miscellaneous  = {round(user_data['other_costs_input']):,} AED
-    </div>
-    <div style="margin-top:18px; font-size:1.18em; color:#fff; background:#228B22; display:inline-block; padding:8px 18px; border-radius:8px; font-weight:700;">
-        ✅ Total Estimated Cost (Without Package): {round(no_pkg_total_cost):,} AED
-    </div>
-</div>
-''', unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Visually appealing HTML card for 'With Package'
-            pkg_rules = packages[best]
-            # Build paid transactions/services lines
-            paid_lines = ""
-            for item_type, label in zip(
-                ["international", "domestic", "cheque", "pdc", "inward_fcy_remittance"],
-                ["International", "Domestic", "Cheque", "PDC", "Inward FCY"]):
-                user_item_count = user_data['int_count'] if item_type == 'international' else \
-                                  user_data['dom_count'] if item_type == 'domestic' else \
-                                  user_data['chq_count'] if item_type == 'cheque' else \
-                                  user_data['pdc_count'] if item_type == 'pdc' else \
-                                  user_data['inward_fcy_count']
-                client_item_rate = user_data['int_cost'] if item_type == 'international' else \
-                                   user_data['dom_cost'] if item_type == 'domestic' else \
-                                   user_data['chq_cost'] if item_type == 'cheque' else \
-                                   user_data['pdc_cost'] if item_type == 'pdc' else \
-                                   user_data['inward_fcy_cost']
-                rule = pkg_rules["transactions"].get(item_type) if item_type in ["international", "domestic", "cheque"] else pkg_rules.get(item_type)
-                paid_count = 0
-                rate_applied = client_item_rate
-                if rule:
-                    free_count = rule.get("free_count", 0)
-                    paid_count = max(0, user_item_count - free_count)
-                    if paid_count > 0 and rule.get("rate_after_free") is not None:
-                        rate_applied = rule["rate_after_free"]
-                else:
-                    paid_count = user_item_count
-                paid_lines += f"&emsp;├─ <b>{label}</b> : {paid_count:,} × {rate_applied:,.2f} = <b style='color:#e4002b;'>{paid_count * rate_applied:,} AED</b><br>"
-            if paid_lines.endswith('<br>'):
-                paid_lines = paid_lines[:-4]  # Remove last <br>
-            paid_lines = paid_lines.replace('├─ <b>Inward FCY</b>', '└─ <b>Inward FCY</b>')
-
-            st.markdown(f'''
-<div style="background: #f8fafd; border: 2px solid #1f77b4; border-radius: 18px; padding: 32px 36px 28px 36px; margin-bottom: 32px; font-family: 'Consolas', 'Menlo', 'Monaco', 'monospace'; font-size: 1.15rem; color: #222; box-shadow: 0 4px 24px 0 rgba(31,119,180,0.07); max-width: 700px;">
-    <div style="font-size:1.3rem; font-weight:700; color:#1f77b4; margin-bottom:18px; letter-spacing:1px;">
-        📦 Cost Breakdown (With {best} Package)
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#1f77b4; font-size:1.1em;">📁 Transaction Costs</span><br>
-        {paid_lines}
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#228B22; font-size:1.1em;">🪙 FX Additional Cost</span><br>
-        &emsp;└─ Using Package Rate = <b style='color:#e4002b;'>0 AED (included in package)</b>
-    </div>
-    <div style="margin-bottom:18px;">
-        <span style="color:#ff9900; font-size:1.1em;">🛠️ Other Costs</span><br>
-        &emsp;├─ WPS / CST      = 0 AED (included in package)<br>
-        &emsp;└─ Miscellaneous  = {round(user_data['other_costs_input']):,} AED (included in package) if pkg_rules.get('other_costs_apply_input', False) else '0 AED (included in package)'
-    </div>
-    <div style="margin-top:18px; font-size:1.18em; color:#fff; background:#1f77b4; display:inline-block; padding:8px 18px; border-radius:8px; font-weight:700;">
-        ✅ Total Estimated Cost (With {best} Package): {round(best_pkg_fees):,} AED
-    </div>
-</div>
-''', unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-
-        # Adjust graph columns and graph size
-        col1, col2 = st.columns([5, 5], gap="large")
-        # In your graph code, add:
-        # fig_cost.update_layout(width=540, height=340)
-        # fig_bar.update_layout(width=540, height=340)
-
-        # --- What-If Analysis section in right column ---
-        with col1:
+            # --- What-If Analysis section moved to graph container ---
             with st.expander("🤔 Interactive What-If Analysis", expanded=False):
                 st.markdown("Use the sliders to see how your savings change with different transaction volumes.")
                 col_wa1, col_wa2 = st.columns(2)
@@ -1950,7 +1911,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                     "Cost (AED)": [no_pkg_cost_wi] + [r["total_cost"] for r in results_wi.values()],
                 })
                 fig_cost_wi = px.bar(df_cost_wi, x="Category", y="Cost (AED)", title="💰 What-If: Total Cost by Option",
-                                     color="Category", text_auto=',.0f', width=540, height=340)
+                                     color="Category", text_auto=',.0f')
                 st.plotly_chart(fig_cost_wi, use_container_width=True)
 
                 # What-If Savings Breakdown Chart (same style as main UI)
@@ -2014,13 +1975,103 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                         plot_bgcolor='#fff',
                         paper_bgcolor='#fff',
                         margin=dict(l=10, r=10, t=40, b=10),
-                        height=340,
+                        height=420,
                     )
                     st.plotly_chart(fig_bar_wi, use_container_width=True)
 
         with col2:
-            # ... cost breakdown cards ...
-            pass
+            # Visually appealing HTML card for 'Without Package'
+            st.markdown(f'''
+<div style="background: #f8fafd; border: 2px solid #808080; border-radius: 18px; padding: 32px 36px 28px 36px; margin-bottom: 32px; font-family: 'Consolas', 'Menlo', 'Monaco', 'monospace'; font-size: 1.15rem; color: #222; box-shadow: 0 4px 24px 0 rgba(228,0,43,0.07); max-width: 700px;">
+    <div style="font-size:1.3rem; font-weight:700; color:#e4002b; margin-bottom:18px; letter-spacing:1px;">
+        🧾 Client's current charges with competitor bank
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#1f77b4; font-size:1.1em;">📁 Transaction Costs</span><br>
+        &emsp;├─ <b>International</b> : {tx['international']:,} × {tx_cost['international']:,.2f} = <b style="color:#e4002b;">{round(tx['international'] * tx_cost['international']):,} AED</b><br>
+        &emsp;├─ <b>Domestic</b>      : {tx['domestic']:,} × {tx_cost['domestic']:,.2f} = {round(tx['domestic'] * tx_cost['domestic']):,} AED<br>
+        &emsp;├─ <b>Cheque</b>        : {tx['cheque']:,} × {tx_cost['cheque']:,.2f} = {round(tx['cheque'] * tx_cost['cheque']):,} AED<br>
+        &emsp;├─ <b>PDC</b>           : {user_data['pdc_count']:,} × {user_data['pdc_cost']:,.2f} = {round(user_data['pdc_count'] * user_data['pdc_cost']):,} AED<br>
+        &emsp;└─ <b>Inward FCY</b>    : {user_data['inward_fcy_count']:,} × {user_data['inward_fcy_cost']:,.2f} = {round(user_data['inward_fcy_count'] * user_data['inward_fcy_cost']):,} AED
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#228B22; font-size:1.1em;">🪙 FX Additional Cost</span><br>
+        &emsp;└─ Compared to <b>{best}</b> Package Rate = <b style="color:#e4002b;">{round(fx_additional_cost_no_pkg):,} AED</b>
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#ff9900; font-size:1.1em;">🛠️ Other Costs</span><br>
+        &emsp;├─ WPS / CST      = {round(user_data['wps_cost']):,} AED<br>
+        &emsp;└─ Miscellaneous  = {round(user_data['other_costs_input']):,} AED
+    </div>
+    <div style="margin-top:18px; font-size:1.18em; color:#fff; background:#827F7F; display:inline-block; padding:8px 18px; border-radius:8px; font-weight:700;">
+        ✅ Total Estimated Cost (Without Package): {round(no_pkg_total_cost):,} AED
+    </div>
+</div>
+''', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Visually appealing HTML card for 'With Package'
+            pkg_rules = packages[best]
+            # Build paid transactions/services lines
+            paid_lines = ""
+            for item_type, label in zip(
+                ["international", "domestic", "cheque", "pdc", "inward_fcy_remittance"],
+                ["International", "Domestic", "Cheque", "PDC", "Inward FCY"]):
+                user_item_count = user_data['int_count'] if item_type == 'international' else \
+                                  user_data['dom_count'] if item_type == 'domestic' else \
+                                  user_data['chq_count'] if item_type == 'cheque' else \
+                                  user_data['pdc_count'] if item_type == 'pdc' else \
+                                  user_data['inward_fcy_count']
+                client_item_rate = user_data['int_cost'] if item_type == 'international' else \
+                                   user_data['dom_cost'] if item_type == 'domestic' else \
+                                   user_data['chq_cost'] if item_type == 'cheque' else \
+                                   user_data['pdc_cost'] if item_type == 'pdc' else \
+                                   user_data['inward_fcy_cost']
+                rule = pkg_rules["transactions"].get(item_type) if item_type in ["international", "domestic", "cheque"] else pkg_rules.get(item_type)
+                paid_count = 0
+                rate_applied = client_item_rate
+                if rule:
+                    free_count = rule.get("free_count", 0)
+                    paid_count = max(0, user_item_count - free_count)
+                    if paid_count > 0 and rule.get("rate_after_free") is not None:
+                        rate_applied = rule["rate_after_free"]
+                else:
+                    paid_count = user_item_count
+                paid_lines += f"&emsp;├─ <b>{label}</b> : {paid_count:,} × {rate_applied:,.2f} = <b style='color:#e4002b;'>{paid_count * rate_applied:,} AED</b><br>"
+            if paid_lines.endswith('<br>'):
+                paid_lines = paid_lines[:-4]  # Remove last <br>
+            paid_lines = paid_lines.replace('├─ <b>Inward FCY</b>', '└─ <b>Inward FCY</b>')
+
+            st.markdown(f'''
+<div style="background: #f8fafd; border: 2px solid #228B22; border-radius: 18px; padding: 32px 36px 28px 36px; margin-bottom: 32px; font-family: 'Consolas', 'Menlo', 'Monaco', 'monospace'; font-size: 1.15rem; color: #222; box-shadow: 0 4px 24px 0 rgba(31,119,180,0.07); max-width: 700px;">
+    <div style="font-size:1.3rem; font-weight:700; color:#1f77b4; margin-bottom:18px; letter-spacing:1px;">
+        📦 Cost Breakdown with ADCB's {best}
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#1f77b4; font-size:1.1em;">📁 Transaction Costs</span><br>
+        {paid_lines}
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#228B22; font-size:1.1em;">🪙 FX Additional Cost</span><br>
+        &emsp;└─ Using Package Rate = <b style='color:#e4002b;'>0 AED (included in package)</b>
+    </div>
+    <div style="margin-bottom:18px;">
+        <span style="color:#ff9900; font-size:1.1em;">🛠️ Other Costs</span><br>
+        &emsp;├─ WPS / CST      = 0 AED (included in package)<br>
+        &emsp;└─ Miscellaneous  = {round(user_data['other_costs_input']):,} AED 
+    </div>
+    <div style="margin-top:18px; font-size:1.18em; color:#fff; background:#228B22; display:inline-block; padding:8px 18px; border-radius:8px; font-weight:700;">
+        ✅ Total Estimated Cost (With {best} Package): {round(best_pkg_fees):,} AED
+    </div>
+</div>
+''', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # Adjust graph columns and graph size
+        col1, col2 = st.columns([5, 5], gap="large")
+        # In your graph code, add:
+        # fig_cost.update_layout(width=540, height=340)
+        # fig_bar.update_layout(width=540, height=340)
 
     # Export Options
     st.markdown("### 📤 Export Results")
