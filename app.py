@@ -1431,6 +1431,32 @@ def apply_custom_css():
             line-height: 1.4;
         }}
         
+        /* --- New Sidebar Callout Style --- */
+        .sidebar-callout {{
+            padding: 1rem 1rem 1rem 1.5rem; /* More padding on the left for the border */
+            margin: 1rem;
+            background-color: #f8f9fa;
+            border-left: 5px solid #cccccc; /* Grey edge */
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }}
+        .sidebar-callout:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }}
+        .sidebar-callout p {{
+            color: #e4002b; /* ADCB Red text */
+            font-size: 1.2rem; /* Slightly larger font */
+            font-weight: 700; /* Bold */
+            font-style: italic; /* Italic */
+            line-height: 1.5;
+            margin: 0;
+            text-align: justify;
+            text-indent: 2em;
+        }}
+        
         /* Responsive Sidebar */
         [data-testid="stSidebar"] {{
             width: 100% !important;
@@ -1537,40 +1563,13 @@ with col2:
 with st.sidebar:
     # New descriptive text at the top
     st.markdown("""
-    <p style="color: #e4002b; font-size: 24px; font-weight: 900; line-height: 1.4; text-align: left; padding: 0 1rem;">
-        <strong><em>
-            An intelligent, AI-driven<br>
-            pricing solution that empowers<br>
-            your team to confidently<br>
-            propose the optimal Business<br>
-            First Package.
-        </em></strong>
-    </p>
+    <div class="sidebar-callout">
+        <p>
+            An intelligent, AI-driven pricing solution that empowers your team to confidently propose the optimal Business First Package.
+        </p>
+    </div>
     """, unsafe_allow_html=True)
-    # st.markdown("""
-    # <p style="
-    #     color: #e4002b;
-    #     font-size: 24px;
-    #     line-height: 1.4;
-    #     text-align: left;
-    #     padding: 0 1rem;
-    #     font-weight: 900;
-    #     font-style: italic;
-    #     font-family: 'Georgia', serif;
-    #     background-color: #fff5f5;
-    #     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.08);
-    #     border-left: 4px solid #e4002b;
-    #     padding-left: 1.2rem;
-    # ">
-    #     <strong><em>
-    #         An intelligent, AI-driven<br>
-    #         pricing solution that empowers<br>
-    #         your team to confidently<br>
-    #         propose the optimal Business<br>
-    #         First Package.
-    #     </em></strong>
-    # </p>
-    # """, unsafe_allow_html=True)
+
 
     st.markdown("---") 
 
