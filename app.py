@@ -1389,6 +1389,12 @@ def apply_custom_css():
     # Base CSS for titles and sidebar width with mobile responsiveness
     st.markdown(f"""
     <style>
+    
+        /* --- Sidebar Font Size --- */
+        [data-testid="stSidebar"] * {{
+            font-size: 1.1rem; /* Adjust this value to your liking */
+        }}
+        
         /* Main Title Styles - Responsive */
         .main-title {{
             font-size: clamp(2rem, 8vw, 6rem) !important;
@@ -1531,7 +1537,7 @@ with col2:
 with st.sidebar:
     # New descriptive text at the top
     st.markdown("""
-    <p style="color: #e4002b; font-size: 24px; line-height: 1.4; text-align: left; padding: 0 1rem;">
+    <p style="color: #e4002b; font-size: 24px; font-weight: 900; line-height: 1.4; text-align: left; padding: 0 1rem;">
         <strong><em>
             An intelligent, AI-driven<br>
             pricing solution that empowers<br>
@@ -1541,7 +1547,30 @@ with st.sidebar:
         </em></strong>
     </p>
     """, unsafe_allow_html=True)
-
+    # st.markdown("""
+    # <p style="
+    #     color: #e4002b;
+    #     font-size: 24px;
+    #     line-height: 1.4;
+    #     text-align: left;
+    #     padding: 0 1rem;
+    #     font-weight: 900;
+    #     font-style: italic;
+    #     font-family: 'Georgia', serif;
+    #     background-color: #fff5f5;
+    #     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.08);
+    #     border-left: 4px solid #e4002b;
+    #     padding-left: 1.2rem;
+    # ">
+    #     <strong><em>
+    #         An intelligent, AI-driven<br>
+    #         pricing solution that empowers<br>
+    #         your team to confidently<br>
+    #         propose the optimal Business<br>
+    #         First Package.
+    #     </em></strong>
+    # </p>
+    # """, unsafe_allow_html=True)
 
     st.markdown("---") 
 
