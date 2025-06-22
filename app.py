@@ -16,6 +16,7 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
 from gtts import gTTS
+import tempfile
 
 
 # Set OpenAI API Key
@@ -32,16 +33,151 @@ def img_to_base64(image_path):
 
 # -------------------- TTS HELPER FUNCTION --------------------
 def play_text_as_speech(text_to_speak):
-    """Generates speech from text and plays it using st.audio."""
+    """Generates speech from text and plays it using st.audio with preference for male voice."""
     try:
-        # Use a specific language and TLD that consistently provides a male voice
-        tts = gTTS(text=text_to_speak, lang='en', tld='com.au', slow=False)
-        audio_fp = BytesIO()
-        tts.write_to_fp(audio_fp)
-        audio_fp.seek(0)
-        st.audio(audio_fp, format='audio/mp3', autoplay=True)
+        # Try pyttsx3 first for local male voice
+        import pyttsx3
+        import tempfile
+        import os
+        
+        # Initialize the TTS engine
+        engine = pyttsx3.init()
+        
+        # Get all available voices
+        voices = engine.getProperty('voices')
+        
+        # Look for male voices - more comprehensive search
+        male_voice = None
+        male_keywords = ['david', 'james', 'mark', 'mike', 'john', 'peter', 'steve', 'chris', 'alex', 'sam']
+        
+        # First, try exact matches for common male names
+        for voice in voices:
+            voice_name_lower = voice.name.lower()
+            for keyword in male_keywords:
+                if keyword in voice_name_lower:
+                    male_voice = voice
+                    break
+            if male_voice:
+                break
+        
+        # If no male voice found, try looking for 'male' in the name
+        if not male_voice:
+            for voice in voices:
+                if 'male' in voice.name.lower():
+                    male_voice = voice
+                    break
+        
+        # If still no male voice, use the first available voice
+        if not male_voice and voices:
+            male_voice = voices[0]
+        
+        # Set the voice
+        if male_voice:
+            engine.setProperty('voice', male_voice.id)
+        
+        # Set speech rate and volume
+        engine.setProperty('rate', 150)  # Speed of speech
+        engine.setProperty('volume', 0.9)  # Volume level
+        
+        # Create temporary file for audio
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+            temp_filename = temp_file.name
+        
+        # Generate speech and save to file
+        engine.save_to_file(text_to_speak, temp_filename)
+        engine.runAndWait()
+        
+        # Read the file and play it
+        with open(temp_filename, 'rb') as audio_file:
+            audio_data = audio_file.read()
+        
+        # Clean up temporary file
+        os.unlink(temp_filename)
+        
+        # Play audio
+        st.audio(audio_data, format='audio/wav', autoplay=True)
+        
+    except ImportError:
+        # Fallback to gTTS if pyttsx3 is not available
+        try:
+            # Use a specific language and TLD that might provide a male voice
+            tts = gTTS(text=text_to_speak, lang='en', tld='com.au', slow=False)
+            audio_fp = BytesIO()
+            tts.write_to_fp(audio_fp)
+            audio_fp.seek(0)
+            st.audio(audio_fp, format='audio/mp3', autoplay=True)
+        except Exception as e:
+            st.warning(f"Could not play speech: {e}")
     except Exception as e:
-        st.warning(f"Could not play speech: {e}")
+        # Fallback to gTTS if pyttsx3 fails
+        try:
+            tts = gTTS(text=text_to_speak, lang='en', tld='com.au', slow=False)
+            audio_fp = BytesIO()
+            tts.write_to_fp(audio_fp)
+            audio_fp.seek(0)
+            st.audio(audio_fp, format='audio/mp3', autoplay=True)
+        except Exception as e2:
+            st.warning(f"Could not play speech: {e2}")
+
+def test_tts_voices():
+    """Test function to debug TTS voice selection - call this to see available voices"""
+    try:
+        import pyttsx3
+        
+        st.markdown("## 🧪 TTS Voice Test")
+        st.info("Testing available voices on your system...")
+        
+        # Initialize the TTS engine
+        engine = pyttsx3.init()
+        
+        # Get all available voices
+        voices = engine.getProperty('voices')
+        
+        st.success(f"✅ Found {len(voices)} available voices:")
+        
+        # Display all voices
+        for i, voice in enumerate(voices):
+            voice_type = "🎤 Male" if any(keyword in voice.name.lower() for keyword in ['david', 'james', 'mark', 'mike', 'john', 'peter', 'steve', 'chris', 'alex', 'sam', 'male']) else "👩 Female"
+            st.write(f"  {i}: {voice.name} | ID: {voice.id} | {voice_type}")
+        
+        # Test each voice
+        st.markdown("### 🔊 Test Voices")
+        test_text = "Hello, this is a test of the text to speech functionality."
+        
+        for i, voice in enumerate(voices):
+            if st.button(f"Test Voice {i}: {voice.name}", key=f"test_voice_{i}"):
+                try:
+                    # Set the voice
+                    engine.setProperty('voice', voice.id)
+                    engine.setProperty('rate', 150)
+                    engine.setProperty('volume', 0.9)
+                    
+                    # Create temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+                        temp_filename = temp_file.name
+                    
+                    # Generate speech
+                    engine.save_to_file(test_text, temp_filename)
+                    engine.runAndWait()
+                    
+                    # Read and play
+                    with open(temp_filename, 'rb') as audio_file:
+                        audio_data = audio_file.read()
+                    
+                    # Clean up
+                    os.unlink(temp_filename)
+                    
+                    # Play audio
+                    st.audio(audio_data, format='audio/wav', autoplay=True)
+                    st.success(f"✅ Playing voice: {voice.name}")
+                    
+                except Exception as e:
+                    st.error(f"❌ Failed to test voice {voice.name}: {str(e)}")
+        
+    except ImportError:
+        st.error("❌ pyttsx3 not installed. Install with: pip install pyttsx3")
+    except Exception as e:
+        st.error(f"❌ TTS test failed: {str(e)}")
 
 # -------------------- UI CONFIG & APP NAMING --------------------
 APP_TITLE = "Fikra Genie"
@@ -1247,25 +1383,25 @@ if 'manual_reset_pending' in st.session_state and st.session_state.manual_reset_
 # -------------------- UI RENDER STARTS HERE --------------------
 
 def apply_custom_css():
-    """Applies custom CSS for styling, including sidebar watermark."""
+    """Applies custom CSS for styling, including sidebar watermark and mobile responsiveness."""
     watermark_base64 = img_to_base64(WATERMARK_IMAGE_PATH)
     
-    # Base CSS for titles and sidebar width
+    # Base CSS for titles and sidebar width with mobile responsiveness
     st.markdown(f"""
     <style>
-        /* Main Title Styles */
+        /* Main Title Styles - Responsive */
         .main-title {{
-            font-size: 6rem !important;  /* Increased from 4rem to 6rem */
+            font-size: clamp(2rem, 8vw, 6rem) !important;
             font-weight: 700;
             color: #e4002b; /* ADCB Red */
             text-align: left;
-            margin-bottom: 0.5rem;  /* Added margin for better spacing */
-            line-height: 1.2;  /* Added for better line height */
+            margin-bottom: 0.5rem;
+            line-height: 1.2;
         }}
-        /* Login Title Styles */
+        /* Login Title Styles - Responsive */
         .login-title {{
-            color: #e4002b !important;  /* ADCB Red */
-            font-size: 3rem !important;
+            color: #e4002b !important;
+            font-size: clamp(1.5rem, 6vw, 3rem) !important;
             font-weight: 700 !important;
             margin-bottom: 2rem !important;
         }}
@@ -1275,32 +1411,74 @@ def apply_custom_css():
         }}
         /* Welcome Image Styles */
         .welcome-image {{
-            max-width: 200px;  /* Adjust this value to control image size */
+            max-width: 200px;
             width: 90%;
             height: auto;
             margin: 2rem auto;
             display: block;
         }}
         .sub-title {{
-            font-size: 1.8rem;
+            font-size: clamp(1rem, 4vw, 1.8rem);
             color: #333;
             text-align: left;
             margin-bottom: 20px;
             line-height: 1.4;
         }}
-        /* Fixed sidebar width */
+        
+        /* Responsive Sidebar */
         [data-testid="stSidebar"] {{
-            width: 450px !important;
+            width: 100% !important;
+            max-width: 450px !important;
         }}
-        /* Change sidebar font size */
-        [data-testid="stSidebar"] * {{
-            font-size: 1.3rem !important;
+        
+        /* Mobile-specific adjustments */
+        @media (max-width: 768px) {{
+            [data-testid="stSidebar"] {{
+                width: 100% !important;
+                max-width: 100% !important;
+            }}
+            
+            /* Make charts responsive */
+            .js-plotly-plot {{
+                width: 100% !important;
+                height: auto !important;
+            }}
+            
+            /* Adjust font sizes for mobile */
+            [data-testid="stSidebar"] * {{
+                font-size: 1rem !important;
+            }}
+            
+            /* Make inputs more touch-friendly */
+            .stSlider > div {{
+                min-height: 60px !important;
+            }}
+            
+            .stButton > button {{
+                min-height: 50px !important;
+                font-size: 1.1rem !important;
+            }}
+            
+            /* Stack columns on mobile */
+            [data-testid="column"] {{
+                width: 100% !important;
+                margin-bottom: 1rem !important;
+            }}
         }}
+        
         /* Custom Expander Styles for 'What-If' */
         [data-testid="stExpander"] summary {{
-            font-size: 1.5rem !important;
+            font-size: clamp(1rem, 3vw, 1.5rem) !important;
             font-weight: bold !important;
             padding: 1rem 0 !important;
+        }}
+        
+        /* Make cost breakdown cards mobile-friendly */
+        @media (max-width: 768px) {{
+            div[style*="font-family: 'Consolas'"] {{
+                font-size: 0.9rem !important;
+                padding: 20px !important;
+            }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -1353,10 +1531,13 @@ with col2:
 with st.sidebar:
     # New descriptive text at the top
     st.markdown("""
-    <p style="color: #e60013; font-size: 28px; line-height: 1.6; text-align: justify; margin-left: 14px;">
+    <p style="color: #e4002b; font-size: 24px; line-height: 1.4; text-align: left; padding: 0 1rem;">
         <strong><em>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;An intelligent, AI-driven pricing solution that empowers your team to confidently 
-             propose the optimal Business First Package. 
+            An intelligent, AI-driven<br>
+            pricing solution that empowers<br>
+            your team to confidently<br>
+            propose the optimal Business<br>
+            First Package.
         </em></strong>
     </p>
     """, unsafe_allow_html=True)
@@ -1507,6 +1688,67 @@ with st.sidebar:
 
     elif st.session_state.input_mode == "AI Assistant":
         st.markdown("### 💬 AI Assistant") # Title for AI assistant mode
+        
+        # --- Client Profile Management for AI Mode ---
+        with st.expander("👤 Client Profile Management", expanded=False):
+            
+            # --- LOAD PROFILE ---
+            saved_profiles = list(st.session_state.client_profiles.keys())
+            if not saved_profiles:
+                st.info("No saved profiles yet. Save one below.")
+            else:
+                profile_to_load = st.selectbox("Select a profile to load", options=[""] + saved_profiles, index=0, key="ai_profile_load")
+                if st.button("Load Profile", use_container_width=True, disabled=(not profile_to_load), key="ai_load_profile"):
+                    profile_data = st.session_state.client_profiles[profile_to_load]
+                    # Load data into AI transaction data structure
+                    if 'transaction_data' in st.session_state:
+                        # Map manual form data to AI transaction data structure
+                        st.session_state.transaction_data.update({
+                            "domestic": {"count": profile_data.get('dom_count_manual_form', 0), "cost": profile_data.get('dom_cost_manual_form', 0.0)},
+                            "international": {"count": profile_data.get('int_count_manual_form', 0), "cost": profile_data.get('int_cost_manual_form', 0.0)},
+                            "cheque": {"count": profile_data.get('chq_count_manual_form', 0), "cost": profile_data.get('chq_cost_manual_form', 0.0)},
+                            "pdc": {"count": profile_data.get('pdc_count_manual_form', 0), "cost": profile_data.get('pdc_cost_manual_form', 0.0)},
+                            "inward_fcy_remittance": {"count": profile_data.get('inward_fcy_count_manual_form', 0), "cost": profile_data.get('inward_fcy_cost_manual_form', 0.0)},
+                            "fx": {"amount": profile_data.get('fx_amount_manual_form', 0.0), "direction": profile_data.get('fx_direction_manual_form', "Buy USD"), "rate": profile_data.get('fx_buy_rate_manual_form', 3.67)},
+                            "wps": {"enabled": profile_data.get('manual_form_wps_enabled_chkbx_onchange', False), "cost": profile_data.get('manual_form_wps_cost_input_field_onchange', 0.0)},
+                            "other_costs_input": profile_data.get('other_costs_manual_form', 0.0)
+                        })
+                    st.session_state.current_client_name = profile_to_load
+                    st.success(f"Profile '{profile_to_load}' loaded into AI Assistant.")
+                    st.rerun()
+
+            # --- SAVE PROFILE ---
+            st.markdown("---")
+            new_client_name = st.text_input("Enter Client Name to Save", value=st.session_state.current_client_name, key="ai_client_name")
+            if st.button("Save Profile", use_container_width=True, disabled=(not new_client_name), key="ai_save_profile"):
+                # Gather current AI transaction data and convert to manual form format for saving
+                if 'transaction_data' in st.session_state:
+                    data = st.session_state.transaction_data
+                    profile_data_to_save = {
+                        'dom_count_manual_form': data["domestic"]["count"],
+                        'dom_cost_manual_form': data["domestic"]["cost"],
+                        'int_count_manual_form': data["international"]["count"],
+                        'int_cost_manual_form': data["international"]["cost"],
+                        'chq_count_manual_form': data["cheque"]["count"],
+                        'chq_cost_manual_form': data["cheque"]["cost"],
+                        'pdc_count_manual_form': data["pdc"]["count"],
+                        'pdc_cost_manual_form': data["pdc"]["cost"],
+                        'inward_fcy_count_manual_form': data["inward_fcy_remittance"]["count"],
+                        'inward_fcy_cost_manual_form': data["inward_fcy_remittance"]["cost"],
+                        'fx_amount_manual_form': data["fx"]["amount"],
+                        'fx_direction_manual_form': data["fx"]["direction"],
+                        'fx_buy_rate_manual_form': data["fx"]["rate"],
+                        'fx_sell_rate_manual_form': data["fx"]["rate"],  # Use same rate for both
+                        'manual_form_wps_enabled_chkbx_onchange': data["wps"]["enabled"],
+                        'manual_form_wps_cost_input_field_onchange': data["wps"]["cost"],
+                        'other_costs_manual_form': data["other_costs_input"]
+                    }
+                    st.session_state.client_profiles[new_client_name] = profile_data_to_save
+                    st.session_state.current_client_name = new_client_name
+                    st.success(f"Profile for '{new_client_name}' saved from AI Assistant data.")
+                else:
+                    st.warning("No AI transaction data available to save.")
+        
         init_chat_state() # Ensure AI state is ready
         process_user_response(None) # This will handle chat UI and TTS calls
     
@@ -1601,16 +1843,16 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             # 2. Find the best package and its cost/fee
             best_pkg_name = best
             best_pkg_true_cost = results[best_pkg_name]["true_total_cost"]
-            best_pkg_fee = results[best_pkg_name]["breakdown"].get("Package Cost", 0)
+            # This is the absolute FX cost of the BEST package, used as a baseline
+            best_pkg_fx_cost_baseline = results[best_pkg_name]["breakdown"].get("Absolute FX Cost", 0)
 
-            # 3. Calculate the 'actual cost' bar value for each option
+            # 3. Calculate the 'display cost' bar value for each option
+            # This logic aligns the chart with the breakdown cards on the right
             bar_values = []
-            for name, true_cost in zip(sorted_categories, sorted_true_costs):
-                if name == best_pkg_name:
-                    bar_values.append(best_pkg_fee)
-                else:
-                    # For all others: (True Cost - Best True Cost) + Best Fee
-                    bar_values.append((true_cost - best_pkg_true_cost) + best_pkg_fee)
+            for true_cost in sorted_true_costs:
+                # The display cost is the true total cost minus the absolute FX cost of the BEST package.
+                # This shows all costs relative to the best FX rate.
+                bar_values.append(true_cost - best_pkg_fx_cost_baseline)
 
             # 4. Assign bar colors
             best_idx = sorted_categories.index(best_pkg_name) if best_pkg_name in sorted_categories else -1
@@ -1645,8 +1887,8 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
             fig_cost = px.bar(df_cost, x="x_pos", y="Cost (AED)",
                               color="Category", color_discrete_sequence=bar_colors)
             
-            # Increase number size on bars
-            fig_cost.update_traces(texttemplate='%{y:,.0f}', textposition='outside', textfont_size=20)
+            # We will add text via annotations, so remove it from here
+            fig_cost.update_traces(textposition='outside')
 
             fig_cost.update_layout(
                 showlegend=False,
@@ -1727,6 +1969,18 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                     xanchor="center",
                     yanchor="bottom"
                 )
+
+            # Add bar labels as annotations to ensure they are drawn on top of the arrow
+            for i, row in df_cost.iterrows():
+                fig_cost.add_annotation(
+                    x=row['x_pos'],
+                    y=row['Cost (AED)'],
+                    text=f"{row['Cost (AED)']:,.0f}",
+                    showarrow=False,
+                    yshift=10,
+                    font=dict(size=20, color="black"),
+                    xanchor="center",
+                )
             st.plotly_chart(fig_cost, use_container_width=True)
             
             # Add Savings Breakdown Chart
@@ -1804,6 +2058,51 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                 
                 st.plotly_chart(fig_savings_main, use_container_width=True)
             
+            # --- PROMINENT SAVINGS HIGHLIGHT SECTION (FINAL COMPACT) ---
+            st.markdown("---")
+
+            # Construct the savings banner HTML (Benefits moved out)
+            savings_banner_html = f"""
+            <div style="background: #28a745; border-radius: 12px; padding: 20px; margin: 10px 0; text-align: center; box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);">
+                <div style="color: white; font-size: 1.3rem; font-weight: 600; margin-bottom: 5px;">
+                    🏆 RECOMMENDED PACKAGE
+                </div>
+                <div style="color: white; font-size: 1.8rem; font-weight: 800; margin-bottom: 12px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">
+                    {best_pkg_name}
+                </div>
+                <div style="color: white; font-size: 1rem; margin-bottom: 8px; opacity: 0.9;">
+                    Monthly Savings
+                </div>
+                <div style="color: white; font-size: 2.2rem; font-weight: 800; text-shadow: 1px 1px 3px rgba(0,0,0,0.25); margin-bottom: 8px;">
+                    {savings:,.0f} <span style="font-size: 1.8rem; vertical-align: middle;">.د.إ</span>
+                </div>
+                <div style="color: white; font-size: 0.9rem; opacity: 0.8;">
+                    💰 That's {savings*12:,.0f} <span style="font-size: 0.8rem; vertical-align: middle;">.د.إ</span> annually!
+                </div>
+            </div>
+            """
+            st.markdown(savings_banner_html, unsafe_allow_html=True)
+
+            # --- Complimentary Benefits Section (Outside the banner) ---
+            complimentary_items_list = []
+            if best_pkg_name in packages:
+                pkg_details = packages[best_pkg_name]
+                complimentary_items_list = pkg_details.get("complimentary_items", [])
+
+            if complimentary_items_list:
+                benefits_text = " &bull; ".join(complimentary_items_list)
+                benefits_html = f"""
+                <div style="background: #f8f9fa; border-left: 5px solid #28a745; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                    <h5 style="color: #28a745; margin-bottom: 10px; font-weight: 600;">🎁 Complimentary Benefits</h5>
+                    <p style="color: #333; font-size: 0.95rem; margin-bottom: 0;">
+                        {benefits_text}
+                    </p>
+                </div>
+                """
+                st.markdown(benefits_html, unsafe_allow_html=True)
+
+            st.markdown("---")
+            
             # What-If Analysis section (Moved into col1)
             with st.expander("🤔 Interactive What-If Analysis", expanded=False):
                 st.markdown("Use the sliders to see how your savings change with different transaction volumes.")
@@ -1852,13 +2151,14 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
 
                     # 2. Find best package details
                     best_pkg_true_cost_wi = results_wi[best_wi]["true_total_cost"]
-                    best_pkg_fee_wi = results_wi[best_wi]["breakdown"].get("Package Cost", 0)
+                    # This is the absolute FX cost of the BEST what-if package, used as a baseline
+                    best_pkg_fx_cost_baseline_wi = results_wi[best_wi]["breakdown"].get("Absolute FX Cost", 0)
 
                     # 3. Calculate bar values
                     bar_values_wi = []
-                    for name, true_cost in zip(sorted_categories_wi, sorted_true_costs_wi):
-                        if name == best_wi: bar_values_wi.append(best_pkg_fee_wi)
-                        else: bar_values_wi.append((true_cost - best_pkg_true_cost_wi) + best_pkg_fee_wi)
+                    for true_cost in sorted_true_costs_wi:
+                        # The display cost is the true total cost minus the absolute FX cost of the BEST package.
+                        bar_values_wi.append(true_cost - best_pkg_fx_cost_baseline_wi)
 
                     # 4. Assign colors
                     best_idx_wi = sorted_categories_wi.index(best_wi)
@@ -1882,7 +2182,8 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
 
                     fig_cost_wi = px.bar(df_cost_wi, x="x_pos", y="Cost (AED)",
                                          color="Category", color_discrete_sequence=bar_colors_wi)
-                    fig_cost_wi.update_traces(texttemplate='%{y:,.0f}', textposition='outside', textfont_size=20)
+                    # We will add text via annotations, so remove it from here
+                    fig_cost_wi.update_traces(textposition='outside')
                     fig_cost_wi.update_layout(
                         title="💰 What-If: Total Cost by Option",
                         showlegend=False,
@@ -1913,7 +2214,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                         x=x1_pos_wi, y=y1_wi, ax=x0_pos_wi, ay=y0_wi,
                         xref="x", yref="y", axref="x", ayref="y", text="",
                         showarrow=True, arrowhead=3, arrowsize=1.5,
-                        arrowwidth=8, arrowcolor="#A0E6A0", opacity=1
+                        arrowwidth=8, arrowcolor="#240F8C", opacity=1
                     )
 
                     savings_label_wi = f"<span style='font-size:15px;font-weight:bold;color:#228B22;line-height:1.1;'>*savings<br>{int(savings_amt_wi):,} AED</span>"
@@ -1925,6 +2226,18 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
                         align="center", bordercolor=None, borderwidth=0,
                         borderpad=0, bgcolor=None, xanchor="center", yanchor="bottom"
                     )
+
+                    # Add bar labels as annotations to ensure they are drawn on top of the arrow
+                    for i, row in df_cost_wi.iterrows():
+                        fig_cost_wi.add_annotation(
+                            x=row['x_pos'],
+                            y=row['Cost (AED)'],
+                            text=f"{row['Cost (AED)']:,.0f}",
+                            showarrow=False,
+                            yshift=10,
+                            font=dict(size=20, color="black"),
+                            xanchor="center",
+                        )
                     st.plotly_chart(fig_cost_wi, use_container_width=True)
 
                     # What-If Savings Breakdown (Styled to match main chart)
