@@ -14,3 +14,5 @@ reportlab>=3.6.0
 gTTS>=2.3.0
 matplotlib
 pyttsx3
+TTS>=0.22.0
+soundfile>=0.12.0
