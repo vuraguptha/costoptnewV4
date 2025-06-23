@@ -811,9 +811,9 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
             "Miscellaneous": f"{user_data['other_costs_input']:.2f} AED"
         },
         "Analysis Outcome": {
-            "Cost without any package": f"{no_pkg_cost:,.0f} AED",
+            "Total monthly cost without any package (including all fees, FX, and services)": f"{no_pkg_cost:,.0f} AED",
             "Recommended Package": best_pkg,
-            "Cost with this package": f"{results[best_pkg]['true_total_cost']:,.0f} AED",
+            "Total monthly cost with this package (including all fees, FX, and services)": f"{results[best_pkg]['true_total_cost']:,.0f} AED",
             "Total Monthly Savings": f"{savings:,.0f} AED"
         }
     }
@@ -844,6 +844,7 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
         "You are a sophisticated financial advisor's assistant for ADCB. Your task is to write a brief, professional, one-paragraph executive summary for a client report. "
         "The summary should be confident and persuasive, written in a formal business tone. "
         "It must highlight the recommended package, the total estimated monthly savings (in AED), and the primary financial advantages (key savings drivers) that lead to this recommendation. "
+        "IMPORTANT: The costs provided are TOTAL monthly costs including all banking fees, FX costs, and services - not just transaction costs. "
         "Use the provided JSON data to craft your response. Do not invent new facts. Start the summary with 'Based on a comprehensive analysis of your transaction profile...'"
     )
 
@@ -1427,14 +1428,64 @@ def apply_custom_css():
         [data-testid="stMarkdownContainer"] h1 {{
             color: #e4002b !important;
         }}
-        /* Welcome Image Styles */
+        
+        /* Welcome Image Styles - Responsive */
         .welcome-image {{
-            max-width: 200px;
-            width: 80%;
+            max-width: 100%;
+            width: auto;
             height: auto;
             margin: 2rem auto;
             display: block;
+            object-fit: contain;
         }}
+        
+        /* Responsive image container for main app image */
+        .main-image-container {{
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        
+        /* Responsive ADCB logo */
+        .adcb-logo {{
+            max-width: 100%;
+            width: auto;
+            height: auto;
+            max-height: 80px;
+            object-fit: contain;
+        }}
+        
+        /* Mobile-specific image adjustments */
+        @media (max-width: 768px) {{
+            .main-image-container {{
+                max-width: 100%;
+                padding: 0 10px;
+            }}
+            
+            .adcb-logo {{
+                max-height: 60px;
+            }}
+            
+            .welcome-image {{
+                max-width: 90%;
+                margin: 1rem auto;
+            }}
+        }}
+        
+        /* Tablet-specific adjustments */
+        @media (min-width: 769px) and (max-width: 1024px) {{
+            .main-image-container {{
+                max-width: 90%;
+            }}
+            
+            .adcb-logo {{
+                max-height: 70px;
+            }}
+        }}
+        
         .sub-title {{
             font-size: clamp(1.4rem, 4vw, 2.3rem);
             color: #333;
@@ -1563,7 +1614,9 @@ with col1:
     st.markdown(f'<p class="sub-title">{APP_SUBTITLE}</p>', unsafe_allow_html=True)
 with col2:
     try:
-        st.image(ADCB_LOGO_PATH, width=400)
+        st.markdown('<div class="adcb-logo">', unsafe_allow_html=True)
+        st.image(ADCB_LOGO_PATH, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     except Exception:
         # This will show a small error message in the app if the logo is not found
         st.error(f"Logo not found", icon="🖼️")
@@ -1831,9 +1884,11 @@ with st.sidebar:
 
 # Main content area
 if st.session_state.show_welcome:
-    # Display the image on the welcome screen
+    # Display the image on the welcome screen with responsive container
     try:
-        st.image(MAIN_APP_IMAGE_PATH, use_container_width=True) # Uses MAIN_APP_IMAGE_PATH
+        st.markdown('<div class="main-image-container">', unsafe_allow_html=True)
+        st.image(MAIN_APP_IMAGE_PATH, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Main image not found at {MAIN_APP_IMAGE_PATH}. Please ensure the image is in the correct path. Error: {e}")
     
