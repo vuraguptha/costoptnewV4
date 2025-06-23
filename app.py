@@ -1424,7 +1424,7 @@ def apply_custom_css():
             display: block;
         }}
         .sub-title {{
-            font-size: clamp(1rem, 4vw, 1.8rem);
+            font-size: clamp(1.2rem, 4vw, 2rem);
             color: #333;
             text-align: left;
             margin-bottom: 20px;
