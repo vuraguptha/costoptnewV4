@@ -17,6 +17,7 @@ import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
 from gtts import gTTS
 import tempfile
+from streamlit_javascript import st_javascript
 
 
 # Set OpenAI API Key
@@ -1365,9 +1366,20 @@ def check_password():
     
     return True
 
+# --- Mobile Login Skip ---
+# Get screen width from the browser. Default to a large number for desktop on first run.
+screen_width = st_javascript("window.innerWidth", key="screen_width_js") or 1024
+
+# If the screen is narrow (i.e., mobile), automatically set authentication to true.
+if screen_width < 768:
+    st.session_state.password_correct = True
+# --- End Mobile Login Skip ---
+
 # If not authenticated, show login and stop the app from running further.
-if not check_password():
-    st.stop()
+# This check now respects the mobile skip logic from above.
+if not st.session_state.get("password_correct", False):
+    if not check_password():
+        st.stop()
 
 # --- Robust manual form reset logic: place this at the very top of your script, before any widgets ---
 if 'manual_reset_pending' in st.session_state and st.session_state.manual_reset_pending:
