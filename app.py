@@ -1404,7 +1404,7 @@ def apply_custom_css():
     
         /* --- Sidebar Font Size --- */
         [data-testid="stSidebar"] * {{
-            font-size: 1.1rem; /* Adjust this value to your liking */
+            font-size: 1.2rem; /* Adjust this value to your liking */
         }}
         
         /* Main Title Styles - Responsive */
@@ -1430,13 +1430,13 @@ def apply_custom_css():
         /* Welcome Image Styles */
         .welcome-image {{
             max-width: 200px;
-            width: 90%;
+            width: 80%;
             height: auto;
             margin: 2rem auto;
             display: block;
         }}
         .sub-title {{
-            font-size: clamp(1rem, 4vw, 1.8rem);
+            font-size: clamp(1.4rem, 4vw, 2.3rem);
             color: #333;
             text-align: left;
             margin-bottom: 20px;
@@ -1858,7 +1858,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
     if "narrative_summary" in results_data and results_data["narrative_summary"]:
         st.markdown("###  Executive Summary")
         st.markdown(f"""
-<div style="font-size: 1.1rem; font-style: italic; border-left: 5px solid #eee; padding-left: 1rem; margin: 1rem 0;">
+<div style="font-size: 1.2rem; font-style: italic; border-left: 5px solid #eee; padding-left: 1rem; margin: 1rem 0;">
 {results_data['narrative_summary']}
 </div>
 """, unsafe_allow_html=True)
