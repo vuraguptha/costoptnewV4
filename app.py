@@ -1392,7 +1392,7 @@ def apply_custom_css():
     
         /* --- Sidebar Font Size --- */
         [data-testid="stSidebar"] * {{
-            font-size: 1.1rem; /* Adjust this value to your liking */
+            font-size: 1.2rem; /* Adjust this value to your liking */
         }}
         
         /* Main Title Styles - Responsive */
