@@ -795,6 +795,18 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
     if not best_pkg:
         return "No savings were identified with any package based on the provided data."
 
+    # --- COST CALCULATION TO ALIGN WITH BAR CHART ---
+    # The bar chart and breakdown cards use the best package's FX cost as a baseline (zero).
+    # We must calculate the costs for the narrative using the same logic to ensure consistency.
+    best_pkg_fx_cost_baseline = results[best_pkg]["breakdown"].get("Absolute FX Cost", 0)
+    
+    # Cost for "Without Package" as shown in the bar chart
+    no_pkg_display_cost = results["Without Package"]["true_total_cost"] - best_pkg_fx_cost_baseline
+    
+    # Cost for the best package as shown in the bar chart
+    best_pkg_display_cost = results[best_pkg]["true_total_cost"] - best_pkg_fx_cost_baseline
+
+
     # Create a simplified data summary for the prompt
     data_summary = {
         "Client's Monthly Transactions": {
@@ -810,9 +822,9 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
             "Miscellaneous": f"{user_data['other_costs_input']:.2f} AED"
         },
         "Analysis Outcome": {
-            "Cost without any package": f"{no_pkg_cost:,.0f} AED",
+            "Chart Cost without any package": f"{no_pkg_display_cost:,.0f} AED",
             "Recommended Package": best_pkg,
-            "Cost with this package": f"{results[best_pkg]['true_total_cost']:,.0f} AED",
+            "Chart Cost with this package": f"{best_pkg_display_cost:,.0f} AED",
             "Total Monthly Savings": f"{savings:,.0f} AED"
         }
     }
@@ -843,6 +855,7 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
         "You are a sophisticated financial advisor's assistant for ADCB. Your task is to write a brief, professional, one-paragraph executive summary for a client report. "
         "The summary should be confident and persuasive, written in a formal business tone. "
         "It must highlight the recommended package, the total estimated monthly savings (in AED), and the primary financial advantages (key savings drivers) that lead to this recommendation. "
+        "VERY IMPORTANT: The costs you mention (e.g., 'Chart Cost without any package') are the same as those displayed in the bar chart and breakdown cards. They represent fees and marginal costs, with the best package's FX rate as a baseline. Do not refer to them as total costs. "
         "Use the provided JSON data to craft your response. Do not invent new facts. Start the summary with 'Based on a comprehensive analysis of your transaction profile...'"
     )
 
