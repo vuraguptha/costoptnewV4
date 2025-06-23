@@ -796,6 +796,11 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
     if not best_pkg:
         return "No savings were identified with any package based on the provided data."
 
+    # Calculate costs excluding FX (same logic as bar chart)
+    best_pkg_fx_cost_baseline = results[best_pkg]["breakdown"].get("Absolute FX Cost", 0)
+    no_pkg_cost_excluding_fx = no_pkg_cost - results["Without Package"]["breakdown"].get("Absolute FX Cost", 0)
+    best_pkg_cost_excluding_fx = results[best_pkg]["true_total_cost"] - best_pkg_fx_cost_baseline
+
     # Create a simplified data summary for the prompt
     data_summary = {
         "Client's Monthly Transactions": {
@@ -811,9 +816,9 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
             "Miscellaneous": f"{user_data['other_costs_input']:.2f} AED"
         },
         "Analysis Outcome": {
-            "Total monthly cost without any package (including all fees, FX, and services)": f"{no_pkg_cost:,.0f} AED",
+            "Monthly banking fees and services cost (excluding FX) without package": f"{no_pkg_cost_excluding_fx:,.0f} AED",
             "Recommended Package": best_pkg,
-            "Total monthly cost with this package (including all fees, FX, and services)": f"{results[best_pkg]['true_total_cost']:,.0f} AED",
+            "Monthly banking fees and services cost (excluding FX) with package": f"{best_pkg_cost_excluding_fx:,.0f} AED",
             "Total Monthly Savings": f"{savings:,.0f} AED"
         }
     }
@@ -844,7 +849,7 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
         "You are a sophisticated financial advisor's assistant for ADCB. Your task is to write a brief, professional, one-paragraph executive summary for a client report. "
         "The summary should be confident and persuasive, written in a formal business tone. "
         "It must highlight the recommended package, the total estimated monthly savings (in AED), and the primary financial advantages (key savings drivers) that lead to this recommendation. "
-        "IMPORTANT: The costs provided are TOTAL monthly costs including all banking fees, FX costs, and services - not just transaction costs. "
+        "IMPORTANT: The costs provided are monthly banking fees and services costs EXCLUDING FX costs (FX is handled separately with preferential rates). "
         "Use the provided JSON data to craft your response. Do not invent new facts. Start the summary with 'Based on a comprehensive analysis of your transaction profile...'"
     )
 
