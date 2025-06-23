@@ -17,7 +17,6 @@ import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
 from gtts import gTTS
 import tempfile
-from streamlit_javascript import st_javascript
 
 
 # Set OpenAI API Key
@@ -796,11 +795,6 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
     if not best_pkg:
         return "No savings were identified with any package based on the provided data."
 
-    # Calculate costs excluding FX (same logic as bar chart)
-    best_pkg_fx_cost_baseline = results[best_pkg]["breakdown"].get("Absolute FX Cost", 0)
-    no_pkg_cost_excluding_fx = no_pkg_cost - results["Without Package"]["breakdown"].get("Absolute FX Cost", 0)
-    best_pkg_cost_excluding_fx = results[best_pkg]["true_total_cost"] - best_pkg_fx_cost_baseline
-
     # Create a simplified data summary for the prompt
     data_summary = {
         "Client's Monthly Transactions": {
@@ -816,9 +810,9 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
             "Miscellaneous": f"{user_data['other_costs_input']:.2f} AED"
         },
         "Analysis Outcome": {
-            "Monthly banking fees and services cost (excluding FX) without package": f"{no_pkg_cost_excluding_fx:,.0f} AED",
+            "Cost without any package": f"{no_pkg_cost:,.0f} AED",
             "Recommended Package": best_pkg,
-            "Monthly banking fees and services cost (excluding FX) with package": f"{best_pkg_cost_excluding_fx:,.0f} AED",
+            "Cost with this package": f"{results[best_pkg]['true_total_cost']:,.0f} AED",
             "Total Monthly Savings": f"{savings:,.0f} AED"
         }
     }
@@ -849,7 +843,6 @@ def generate_narrative_summary(best_pkg, savings, user_data, no_pkg_cost, result
         "You are a sophisticated financial advisor's assistant for ADCB. Your task is to write a brief, professional, one-paragraph executive summary for a client report. "
         "The summary should be confident and persuasive, written in a formal business tone. "
         "It must highlight the recommended package, the total estimated monthly savings (in AED), and the primary financial advantages (key savings drivers) that lead to this recommendation. "
-        "IMPORTANT: The costs provided are monthly banking fees and services costs EXCLUDING FX costs (FX is handled separately with preferential rates). "
         "Use the provided JSON data to craft your response. Do not invent new facts. Start the summary with 'Based on a comprehensive analysis of your transaction profile...'"
     )
 
@@ -1372,20 +1365,9 @@ def check_password():
     
     return True
 
-# --- Mobile Login Skip ---
-# Get screen width from the browser. Default to a large number for desktop on first run.
-screen_width = st_javascript("window.innerWidth", key="screen_width_js") or 1024
-
-# If the screen is narrow (i.e., mobile), automatically set authentication to true.
-if screen_width < 768:
-    st.session_state.password_correct = True
-# --- End Mobile Login Skip ---
-
 # If not authenticated, show login and stop the app from running further.
-# This check now respects the mobile skip logic from above.
-if not st.session_state.get("password_correct", False):
-    if not check_password():
-        st.stop()
+if not check_password():
+    st.stop()
 
 # --- Robust manual form reset logic: place this at the very top of your script, before any widgets ---
 if 'manual_reset_pending' in st.session_state and st.session_state.manual_reset_pending:
@@ -1410,7 +1392,7 @@ def apply_custom_css():
     
         /* --- Sidebar Font Size --- */
         [data-testid="stSidebar"] * {{
-            font-size: 1.2rem; /* Adjust this value to your liking */
+            font-size: 1.1rem; /* Adjust this value to your liking */
         }}
         
         /* Main Title Styles - Responsive */
@@ -1433,66 +1415,16 @@ def apply_custom_css():
         [data-testid="stMarkdownContainer"] h1 {{
             color: #e4002b !important;
         }}
-        
-        /* Welcome Image Styles - Responsive */
+        /* Welcome Image Styles */
         .welcome-image {{
-            max-width: 100%;
-            width: auto;
+            max-width: 200px;
+            width: 90%;
             height: auto;
             margin: 2rem auto;
             display: block;
-            object-fit: contain;
         }}
-        
-        /* Responsive image container for main app image */
-        .main-image-container {{
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }}
-        
-        /* Responsive ADCB logo */
-        .adcb-logo {{
-            max-width: 100%;
-            width: auto;
-            height: auto;
-            max-height: 80px;
-            object-fit: contain;
-        }}
-        
-        /* Mobile-specific image adjustments */
-        @media (max-width: 768px) {{
-            .main-image-container {{
-                max-width: 100%;
-                padding: 0 10px;
-            }}
-            
-            .adcb-logo {{
-                max-height: 60px;
-            }}
-            
-            .welcome-image {{
-                max-width: 90%;
-                margin: 1rem auto;
-            }}
-        }}
-        
-        /* Tablet-specific adjustments */
-        @media (min-width: 769px) and (max-width: 1024px) {{
-            .main-image-container {{
-                max-width: 90%;
-            }}
-            
-            .adcb-logo {{
-                max-height: 70px;
-            }}
-        }}
-        
         .sub-title {{
-            font-size: clamp(1.4rem, 4vw, 2.3rem);
+            font-size: clamp(1rem, 4vw, 1.8rem);
             color: #333;
             text-align: left;
             margin-bottom: 20px;
@@ -1619,9 +1551,7 @@ with col1:
     st.markdown(f'<p class="sub-title">{APP_SUBTITLE}</p>', unsafe_allow_html=True)
 with col2:
     try:
-        st.markdown('<div class="adcb-logo">', unsafe_allow_html=True)
-        st.image(ADCB_LOGO_PATH, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.image(ADCB_LOGO_PATH, width=400)
     except Exception:
         # This will show a small error message in the app if the logo is not found
         st.error(f"Logo not found", icon="🖼️")
@@ -1889,11 +1819,9 @@ with st.sidebar:
 
 # Main content area
 if st.session_state.show_welcome:
-    # Display the image on the welcome screen with responsive container
+    # Display the image on the welcome screen
     try:
-        st.markdown('<div class="main-image-container">', unsafe_allow_html=True)
-        st.image(MAIN_APP_IMAGE_PATH, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.image(MAIN_APP_IMAGE_PATH, use_container_width=True) # Uses MAIN_APP_IMAGE_PATH
     except Exception as e:
         st.error(f"Main image not found at {MAIN_APP_IMAGE_PATH}. Please ensure the image is in the correct path. Error: {e}")
     
@@ -1918,7 +1846,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
     if "narrative_summary" in results_data and results_data["narrative_summary"]:
         st.markdown("###  Executive Summary")
         st.markdown(f"""
-<div style="font-size: 1.2rem; font-style: italic; border-left: 5px solid #eee; padding-left: 1rem; margin: 1rem 0;">
+<div style="font-size: 1.1rem; font-style: italic; border-left: 5px solid #eee; padding-left: 1rem; margin: 1rem 0;">
 {results_data['narrative_summary']}
 </div>
 """, unsafe_allow_html=True)
