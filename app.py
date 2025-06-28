@@ -1288,6 +1288,268 @@ def generate_analysis():
         # For now, let it be, so the user sees the 'no savings' message in context.
         return False # Indicate no savings/best package found
 
+# -------------------- ACTIVESAVER CONFIG --------------------
+# ADCB ActiveSaver tiered interest rates
+savings_pack_plus_slabs = [
+    {'min_balance': 0, 'max_balance': 50000, 'interest_rate': 0.4, 'description': 'Basic Tier'},
+    {'min_balance': 50000, 'max_balance': 200000, 'interest_rate': 1.0, 'description': 'Silver Tier'},
+    {'min_balance': 200000, 'max_balance': 2000000, 'interest_rate': 1.75, 'description': 'Gold Tier'},
+    {'min_balance': 2000000, 'max_balance': 10000000, 'interest_rate': 2.25, 'description': 'Platinum Tier'},
+    {'min_balance': 10000000, 'max_balance': 20000000, 'interest_rate': 2, 'description': 'Diamond Tier'},
+    {'min_balance': 20000000, 'max_balance': None, 'interest_rate': 0.2, 'description': 'Elite Tier'}
+]
+
+class SavingsInterestCalculator:
+    """
+    A class to calculate interest rates and amounts based on tiered balance slabs.
+    Each slab has a different interest rate applied to the balance within that range.
+    Now supports dynamic balance changes over time periods.
+    """
+    
+    def __init__(self, slabs_config):
+        """
+        Initialize the calculator with tiered slabs configuration.
+        
+        Args:
+            slabs_config (list): List of dictionaries containing slab configurations.
+                Each slab should have:
+                - 'min_balance': Minimum balance for this slab (inclusive)
+                - 'max_balance': Maximum balance for this slab (exclusive, None for unlimited)
+                - 'interest_rate': Annual interest rate as percentage (e.g., 2.5 for 2.5%)
+                - 'description': Optional description of the slab
+        """
+        self.slabs = self._validate_and_sort_slabs(slabs_config)
+    
+    def _validate_and_sort_slabs(self, slabs_config):
+        """
+        Validate and sort slabs by minimum balance to ensure proper order.
+        
+        Args:
+            slabs_config (list): Raw slabs configuration
+            
+        Returns:
+            list: Validated and sorted slabs
+        """
+        if not slabs_config:
+            raise ValueError("Slabs configuration cannot be empty")
+        
+        # Validate each slab
+        for i, slab in enumerate(slabs_config):
+            required_keys = ['min_balance', 'max_balance', 'interest_rate']
+            missing_keys = [key for key in required_keys if key not in slab]
+            if missing_keys:
+                raise ValueError(f"Slab {i} missing required keys: {missing_keys}")
+            
+            if slab['min_balance'] < 0 or slab['interest_rate'] < 0:
+                raise ValueError(f"Slab {i} has negative values")
+            
+            if slab['max_balance'] is not None and slab['max_balance'] <= slab['min_balance']:
+                raise ValueError(f"Slab {i} max_balance must be greater than min_balance")
+        
+        # Sort by minimum balance
+        sorted_slabs = sorted(slabs_config, key=lambda x: x['min_balance'])
+        
+        # Check for gaps or overlaps
+        for i in range(len(sorted_slabs) - 1):
+            current_slab = sorted_slabs[i]
+            next_slab = sorted_slabs[i + 1]
+            
+            if current_slab['max_balance'] is not None:
+                if current_slab['max_balance'] != next_slab['min_balance']:
+                    raise ValueError(f"Gap or overlap between slabs {i} and {i+1}")
+        
+        return sorted_slabs
+    
+    def calculate_interest_simple(self, balance_days_dict, compounding_frequency='monthly'):
+        """
+        Calculate interest for a simple balance-days dictionary.
+        
+        Args:
+            balance_days_dict (dict): Dictionary with balance as key and days as value.
+                Example: {25000: 10, 75000: 15, 150000: 20}
+            compounding_frequency (str): 'daily', 'monthly', 'quarterly', 'annually'
+            
+        Returns:
+            dict: Detailed interest calculation results
+        """
+        # Input validation
+        if not isinstance(balance_days_dict, dict):
+            raise ValueError(f"Input must be a dictionary, got {type(balance_days_dict)}")
+        
+        if not balance_days_dict:
+            raise ValueError("Balance-days dictionary cannot be empty")
+        
+        # Convert dictionary to the format expected by calculate_interest_dynamic
+        balance_periods = []
+        for balance, days in balance_days_dict.items():
+            # Validate balance and days
+            if not isinstance(balance, (int, float)) or not isinstance(days, (int, float)):
+                raise ValueError(f"Balance and days must be numbers, got balance={type(balance)}, days={type(days)}")
+            
+            if balance < 0 or days <= 0:
+                raise ValueError(f"Invalid balance ({balance}) or days ({days}) - both must be positive")
+            
+            # Convert to proper types and create description safely
+            balance_float = float(balance)
+            days_int = int(days)
+            
+            balance_periods.append({
+                'balance': balance_float,
+                'days': days_int,
+                'description': f'{balance_float:,.0f} AED for {days_int} days'
+            })
+        
+        try:
+            return self.calculate_interest_dynamic(balance_periods, compounding_frequency)
+        except Exception as e:
+            raise ValueError(f"Error in calculate_interest_dynamic: {str(e)}")
+    
+    def calculate_interest_dynamic(self, balance_periods, compounding_frequency='monthly'):
+        """
+        Calculate interest for dynamic balance changes over time periods.
+        
+        Args:
+            balance_periods (list): List of dictionaries containing balance periods.
+                Each period should have:
+                - 'balance': Account balance for this period
+                - 'days': Number of days this balance is maintained
+                - 'description': Optional description of the period
+            compounding_frequency (str): 'daily', 'monthly', 'quarterly', 'annually'
+            
+        Returns:
+            dict: Detailed interest calculation results
+        """
+        if not balance_periods:
+            raise ValueError("Balance periods cannot be empty")
+        
+        total_interest = 0
+        total_days = 0
+        period_breakdown = []
+        
+        for i, period in enumerate(balance_periods):
+            if 'balance' not in period or 'days' not in period:
+                raise ValueError(f"Period {i} missing required keys: balance, days")
+            
+            balance = period['balance']
+            days = period['days']
+            
+            if balance < 0 or days <= 0:
+                raise ValueError(f"Period {i} has invalid balance or days")
+            
+            # Calculate interest for this period
+            period_result = self.calculate_interest(balance, days, compounding_frequency)
+            
+            period_breakdown.append({
+                'period_number': i + 1,
+                'balance': balance,
+                'days': days,
+                'interest': period_result['total_interest'],
+                'effective_rate': period_result['effective_annual_rate'],
+                'description': period.get('description', f'Period {i + 1}'),
+                'slab_breakdown': period_result['slab_breakdown']
+            })
+            
+            total_interest += period_result['total_interest']
+            total_days += days
+        
+        # Calculate overall effective annual rate
+        total_balance_days = sum(p['balance'] * p['days'] for p in balance_periods)
+        overall_effective_rate = (total_interest / total_balance_days * 365 * 100) if total_balance_days > 0 else 0
+        
+        return {
+            'total_interest': total_interest,
+            'total_days': total_days,
+            'overall_effective_rate': overall_effective_rate,
+            'compounding_frequency': compounding_frequency,
+            'period_breakdown': period_breakdown,
+            'total_balance_days': total_balance_days,
+            'average_balance': total_balance_days / total_days if total_days > 0 else 0
+        }
+    
+    def calculate_interest(self, balance, days=365, compounding_frequency='monthly'):
+        """
+        Calculate interest for a given balance based on the single-tier logic (not slabbed).
+        The entire balance gets the rate of the tier in which it falls.
+        """
+        if balance < 0:
+            raise ValueError("Balance cannot be negative")
+        
+        # Find the slab/tier where the balance falls
+        applicable_slab = None
+        for slab in self.slabs:
+            min_bal = slab['min_balance']
+            max_bal = slab['max_balance'] if slab['max_balance'] is not None else float('inf')
+            if balance >= min_bal and (max_bal is None or balance < max_bal):
+                applicable_slab = slab
+                break
+        if not applicable_slab:
+            raise ValueError("No applicable slab found for the given balance")
+        
+        annual_rate = applicable_slab['interest_rate'] / 100
+        period_ratio = days / 365
+        interest = balance * annual_rate * period_ratio
+        
+        slab_breakdown = [{
+            'slab_range': f"{applicable_slab['min_balance']:,.2f} - {applicable_slab['max_balance'] if applicable_slab['max_balance'] is not None else '∞'}",
+            'balance_in_slab': balance,
+            'interest_rate': applicable_slab['interest_rate'],
+            'interest_amount': interest,
+            'description': applicable_slab.get('description', '')
+        }]
+        
+        effective_annual_rate = (interest / balance * 365 / days * 100) if balance > 0 else 0
+        
+        return {
+            'total_balance': balance,
+            'total_interest': interest,
+            'effective_annual_rate': effective_annual_rate,
+            'calculation_period_days': days,
+            'compounding_frequency': compounding_frequency,
+            'slab_breakdown': slab_breakdown,
+        }
+
+def analyze_activesaver_benefit(balance_days_dict, package_cost, compounding_frequency='monthly'):
+    """
+    Analyze how much ActiveSaver interest can offset package costs.
+    
+    Args:
+        balance_days_dict (dict): Dictionary with balance as key and days as value
+        package_cost (float): Monthly package cost
+        compounding_frequency (str): Compounding frequency
+        
+    Returns:
+        dict: ActiveSaver analysis results
+    """
+    try:
+        # Initialize calculator
+        calculator = SavingsInterestCalculator(savings_pack_plus_slabs)
+        
+        # Calculate interest
+        interest_result = calculator.calculate_interest_simple(balance_days_dict, compounding_frequency)
+        annual_interest = interest_result['total_interest']
+        monthly_interest = annual_interest / 12
+        
+        # Calculate net cost after interest
+        net_monthly_cost = max(0, package_cost - monthly_interest)
+        offset_percentage = (monthly_interest / package_cost * 100) if package_cost > 0 else 0
+        
+        return {
+            'package_cost': package_cost,
+            'monthly_interest': monthly_interest,
+            'annual_interest': annual_interest,
+            'net_monthly_cost': net_monthly_cost,
+            'offset_percentage': offset_percentage,
+            'interest_details': interest_result,
+            'balance_days_dict': balance_days_dict,
+            'is_fully_covered': monthly_interest >= package_cost
+        }
+    except Exception as e:
+        return {
+            'error': str(e),
+            'package_cost': package_cost,
+            'balance_days_dict': balance_days_dict
+        }
+
 # -------------------- SESSION STATE INITIALIZATION --------------------
 # This section was previously part of the UI section but is better placed before UI rendering logic
 # It ensures all session state variables are checked/initialized before any UI elements try to access them.
@@ -1304,6 +1566,10 @@ if "tts_language" not in st.session_state: # Re-add session state for TTS langua
     st.session_state.tts_language = "en" # Default to English
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+
+# --- ActiveSaver State Management ---
+if "show_activesaver" not in st.session_state:
+    st.session_state.show_activesaver = False
 
 # --- Client Profile and Form State Management ---
 if "client_profiles" not in st.session_state:
@@ -1569,6 +1835,19 @@ def apply_custom_css():
         st.sidebar.warning("Sidebar watermark image not found.", icon="⚠️")
 
 apply_custom_css()
+
+# Add CSS for 80% main content width
+st.markdown("""
+    <style>
+    .main-content-80 {
+        max-width: 80vw !important;
+        width: 80vw !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+    </style>
+    <div class='main-content-80'>
+""", unsafe_allow_html=True)
 
 col1, col2 = st.columns([4, 1], vertical_alignment="center")
 with col1:
@@ -2156,6 +2435,7 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
 
             st.markdown("---")
             
+            
             # What-If Analysis section (Moved into col1)
             with st.expander("🤔 Interactive What-If Analysis", expanded=False):
                 st.markdown("Use the sliders to see how your savings change with different transaction volumes.")
@@ -2462,3 +2742,151 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
         pdf_bytes = export_to_pdf(results, user_data, best, savings, results["Without Package"]["true_total_cost"], results_data.get("narrative_summary", ""))
         st.download_button("📄 Export to PDF", data=pdf_bytes, file_name="package_comparison.pdf", mime="application/pdf")
     
+    # --- ACTIVESAVER INTEGRATION (Only appears after export, and only if user clicks) ---
+    st.markdown("---")
+    
+    # Create 2-column layout for ActiveSaver section
+    col_as_main1, col_as_main2 = st.columns([7, 3])
+    
+    with col_as_main1:
+        # --- ACTIVESAVER INTEGRATION ---
+        st.markdown("### 💰 Want to Save Even More on Your Package Fee?")
+        st.markdown("**ADCB ActiveSaver** is a high-interest operational CASA account that can offset your package costs through interest earnings!")
+        
+        # Ask if user wants to explore ActiveSaver
+        col_as1, col_as2 = st.columns(2)
+        with col_as1:
+            if st.button("🚀 Explore ActiveSaver Benefits", key="explore_activesaver"):
+                st.session_state.show_activesaver = True
+                st.rerun()
+        with col_as2:
+            if st.button("❌ Skip ActiveSaver", key="skip_activesaver"):
+                st.session_state.show_activesaver = False
+                st.rerun()
+        
+        # Show ActiveSaver calculator if user wants to explore
+        if st.session_state.get("show_activesaver", False):
+            st.markdown("---")
+            st.markdown("### 🧮 ActiveSaver Interest Calculator")
+            st.markdown("Enter your expected balance patterns to see how much interest you can earn:")
+
+            # --- Currency selector ---
+            if "activesaver_currency" not in st.session_state:
+                st.session_state.activesaver_currency = "AED"
+            
+            # Replace selectbox with buttons
+            col_cur1, col_cur2 = st.columns(2)
+            with col_cur1:
+                if st.button("AED", key="as_btn_aed"):
+                    st.session_state.activesaver_currency = "AED"
+                    st.rerun()
+            with col_cur2:
+                if st.button("USD", key="as_btn_usd"):
+                    st.session_state.activesaver_currency = "USD"
+                    st.rerun()
+            
+            st.markdown(f"**Selected Currency:** <span style='font-weight:bold;'>{st.session_state.activesaver_currency}</span>", unsafe_allow_html=True)
+            currency = st.session_state.activesaver_currency
+
+            # Define slabs for AED and USD
+            AED_SLABS = [
+                {'min_balance': 0, 'max_balance': 50000, 'interest_rate': 0.4, 'description': 'Basic Tier'},
+                {'min_balance': 50000, 'max_balance': 200000, 'interest_rate': 1.0, 'description': 'Silver Tier'},
+                {'min_balance': 200000, 'max_balance': 2000000, 'interest_rate': 1.75, 'description': 'Gold Tier'},
+                {'min_balance': 2000000, 'max_balance': 10000000, 'interest_rate': 2.25, 'description': 'Platinum Tier'},
+                {'min_balance': 10000000, 'max_balance': 20000000, 'interest_rate': 2, 'description': 'Diamond Tier'},
+                {'min_balance': 20000000, 'max_balance': None, 'interest_rate': 0.2, 'description': 'Elite Tier'}
+            ]
+            USD_SLABS = [
+                {'min_balance': 0, 'max_balance': 15000, 'interest_rate': 0.2, 'description': 'Basic Tier'},
+                {'min_balance': 15000, 'max_balance': 50000, 'interest_rate': 0.6, 'description': 'Silver Tier'},
+                {'min_balance': 50000, 'max_balance': 500000, 'interest_rate': 1, 'description': 'Gold Tier'},
+                {'min_balance': 500000, 'max_balance': 3000000, 'interest_rate': 1.5, 'description': 'Platinum Tier'},
+                {'min_balance': 3000000, 'max_balance': 6000000, 'interest_rate': 2, 'description': 'Diamond Tier'},
+                {'min_balance': 6000000, 'max_balance': None, 'interest_rate': 0.2, 'description': 'Elite Tier'}
+            ]
+            if currency == "AED":
+                activesaver_slabs = AED_SLABS
+                currency_symbol = "AED"
+            else:
+                activesaver_slabs = USD_SLABS
+                currency_symbol = "USD"
+
+            # Get package cost for analysis
+            package_cost = results[best]["breakdown"].get("Package Cost", 0)
+
+            # --- Dynamic Balance/Days Rows ---
+            if "activesaver_rows" not in st.session_state or st.session_state.get("activesaver_currency_last", None) != currency:
+                st.session_state.activesaver_rows = [{"balance": 100000.0, "days": 30}]
+                st.session_state.activesaver_currency_last = currency
+            rows = st.session_state.activesaver_rows
+
+            st.markdown(f"#### 📊 Balance Pattern Input ({currency_symbol})")
+            st.markdown("Add as many rows as you want. Each row is a balance and the number of days it is maintained.")
+
+            # Render rows
+            remove_indices = []
+            for i, row in enumerate(rows):
+                c1, c2, c3 = st.columns([4, 4, 1])
+                with c1:
+                    rows[i]["balance"] = st.number_input(f"Balance ({currency_symbol}) #{i+1}", min_value=0.0, value=row["balance"], step=1000.0, key=f"as_balance_{i}_{currency_symbol}")
+                with c2:
+                    rows[i]["days"] = st.number_input(f"Days #{i+1}", min_value=1, value=row["days"], step=1, key=f"as_days_{i}_{currency_symbol}")
+                with c3:
+                    if len(rows) > 1:
+                        if st.button("🗑️", key=f"remove_row_{i}_{currency_symbol}"):
+                            remove_indices.append(i)
+            # Remove rows marked for deletion
+            for idx in sorted(remove_indices, reverse=True):
+                del rows[idx]
+            # Add row button
+            if st.button("➕ Add Row", key=f"add_activesaver_row_{currency_symbol}"):
+                rows.append({"balance": 0.0, "days": 1})
+
+            # Calculate ActiveSaver benefits
+            if st.button(f"💡 Calculate ActiveSaver Benefits ({currency_symbol})", key=f"calc_activesaver_{currency_symbol}"):
+                # Build balance-days dictionary
+                balance_days_dict = {}
+                for row in rows:
+                    bal = float(row["balance"])
+                    days = int(row["days"])
+                    if bal > 0 and days > 0:
+                        balance_days_dict[bal] = days
+                if not balance_days_dict:
+                    st.error(f"Please enter at least one valid balance and days row for {currency_symbol}.")
+                else:
+                    # Use the correct slabs for calculation
+                    calculator = SavingsInterestCalculator(activesaver_slabs)
+                    interest_result = calculator.calculate_interest_simple(balance_days_dict)
+                    period_interest = interest_result['total_interest']
+                    net_cost = max(0, package_cost - period_interest)
+                    offset_pct = (period_interest / package_cost * 100) if package_cost > 0 else 0
+                    st.markdown("---")
+                    st.markdown(f"### 🎯 ActiveSaver Analysis Results ({currency_symbol})")
+                    st.markdown(f"**Interest for Entered Period:** <span style='font-size:1.3em;font-weight:bold;'>{period_interest:,.0f} {currency_symbol}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Net Package Cost after Interest:** <span style='font-size:1.3em;font-weight:bold;color:#28a745;'>{net_cost:,.0f} {currency_symbol}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Offset Percentage:** <span style='font-size:1.1em;font-weight:bold;'>{offset_pct:.1f}%</span>", unsafe_allow_html=True)
+                    st.markdown("---")
+                    # --- Enhanced Simulation & Suggestions ---
+                    st.markdown(f"### 🔍 Simulation & Suggestions ({currency_symbol})")
+                    # 1. What balance for what days is needed to fully offset the package fee?
+                    # Try to find the minimum balance (in the highest tier) for the max days entered that would cover the package fee
+                    max_days = max([r['days'] for r in rows])
+                    found = False
+                    # Start 70% width container
+                    st.markdown('<div style="width:70%;margin:auto;">', unsafe_allow_html=True)
+                    for slab in reversed(activesaver_slabs):
+                        # Try to solve for balance: balance * rate * (days/365) = package_cost
+                        rate = slab['interest_rate'] / 100
+                        needed_balance = package_cost / (rate * (max_days/365)) if rate > 0 else None
+                        if needed_balance is not None and (slab['min_balance'] <= needed_balance < (slab['max_balance'] if slab['max_balance'] else float('inf'))):
+                            st.markdown(f"To fully offset your package fee, you need to keep at least <b>{needed_balance:,.0f} {currency_symbol}</b> in the <b>{slab['description']}</b> tier for <b>{max_days}</b> days.", unsafe_allow_html=True)
+                            found = True
+                            break
+                    if not found:
+                        st.warning(f"With the current tiers, it's not possible to fully offset the package fee for {max_days} days.")
+
+    # col_as_main2 is intentionally left empty
+
+# Close the main-content-80 container
+st.markdown("</div>", unsafe_allow_html=True)
