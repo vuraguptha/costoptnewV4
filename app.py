@@ -201,20 +201,6 @@ WATERMARK_IMAGE_PATH = os.path.join(SCRIPT_DIR, WATERMARK_IMAGE_FILENAME)
 
 # -------------------- PACKAGE CONFIG --------------------
 packages = {
-    "Package Digital": {
-        "cost": 150,
-        "transactions": {
-            "international": {"free_count": 0, "rate_after_free": 60},
-            "domestic": {"free_count": 9999, "rate_after_free": None}, # Unlimited free, or use client's rate if somehow exceeded
-            "cheque": {"free_count": 0, "rate_after_free": 1}
-        },
-        "pdc": {"free_count": 0, "rate_after_free": 25},
-        "inward_fcy_remittance": {"free_count": 0, "rate_after_free": 25},
-        "other_costs_apply_input": True, # User's 'Other Costs' are added to this package's total
-        "fx_buy_rate": 3.6770,
-        "fx_sell_rate": 3.6690,
-        "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
-    },
     "Package Essential": {
         "cost": 275,
         "transactions": {
@@ -223,7 +209,7 @@ packages = {
             "cheque": {"free_count": 17, "rate_after_free": 1}
         },
         "pdc": {"free_count": 0, "rate_after_free": 25},
-        "inward_fcy_remittance": {"free_count": 0, "rate_after_free": 25},
+        "inward_fcy_remittance": {"free_count": 0, "rate_after_free": 10},
         "other_costs_apply_input": True,
         "fx_buy_rate": 3.6770,
         "fx_sell_rate": 3.6690,
@@ -236,9 +222,9 @@ packages = {
             "domestic": {"free_count": 9999, "rate_after_free": None},
             "cheque": {"free_count": 17, "rate_after_free": 1}
         },
-        "pdc": {"free_count": 99999, "rate_after_free": 0}, # Effectively free
-        "inward_fcy_remittance": {"free_count": 99999, "rate_after_free": 0}, # Effectively free
-        "other_costs_apply_input": False, # User's 'Other Costs' are NOT added (free with package)
+        "pdc": {"free_count": 0, "rate_after_free": 25},
+        "inward_fcy_remittance": {"free_count": 0, "rate_after_free": 10},
+        "other_costs_apply_input": True,
         "fx_buy_rate": 3.6760,
         "fx_sell_rate": 3.6700,
         "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
@@ -257,8 +243,36 @@ packages = {
         "fx_sell_rate": 3.6710,
         "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
     },
-    "Package Executive plus": {
-        "cost": 1650,
+    "Package Gold": {
+        "cost": 1500,
+        "transactions": {
+            "international": {"free_count": 75, "rate_after_free": 20},
+            "domestic": {"free_count": 9999, "rate_after_free": None}, # Unlimited free, or use client's rate if somehow exceeded
+            "cheque": {"free_count": 0, "rate_after_free": 1}
+        },
+        "pdc": {"free_count": 99999, "rate_after_free": 0},
+        "inward_fcy_remittance": {"free_count": 0, "rate_after_free": 10},
+        "other_costs_apply_input": True, # User's 'Other Costs' are added to this package's total
+        "fx_buy_rate": 3.6760,
+        "fx_sell_rate": 3.6700,
+        "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
+    },
+    "Package Platinum": {
+        "cost": 2000,
+        "transactions": {
+            "international": {"free_count": 75, "rate_after_free": 20},
+            "domestic": {"free_count": 9999, "rate_after_free": None},
+            "cheque": {"free_count": 17, "rate_after_free": 1}
+        },
+        "pdc": {"free_count": 99999, "rate_after_free": 0}, # Effectively free
+        "inward_fcy_remittance": {"free_count": 99999, "rate_after_free": 0}, # Effectively free
+        "other_costs_apply_input": False, # User's 'Other Costs' are NOT added (free with package)
+        "fx_buy_rate": 3.6740,
+        "fx_sell_rate": 3.6710,
+        "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
+    },
+    "Package Platinum plus": {
+        "cost": 2500,
         "transactions": {
             "international": {"free_count": 75, "rate_after_free": 20},
             "domestic": {"free_count": 9999, "rate_after_free": None},
@@ -272,7 +286,6 @@ packages = {
         "complimentary_items": ["Free Credit Cards", "Free Debit Cards", "ProCash Soft Token"]
     }
 }
-
 # -------------------- FUNCTIONS --------------------
 def calculate_total_cost(transactions, transaction_costs, fx_amount, fx_direction, package_fx_rate, client_fx_rate, wps_cost, other_costs_input, package):
     """
@@ -2890,3 +2903,4 @@ if st.session_state.submitted and "analysis_results" in st.session_state:
 
 # Close the main-content-80 container
 st.markdown("</div>", unsafe_allow_html=True)
+
