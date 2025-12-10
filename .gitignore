@@ -13,7 +13,7 @@ venv/
 .venv/
 env/
 Backup_24Nov2025/
-
+.streamlit/
 # =========================
 # Streamlit
 # =========================
@@ -52,3 +52,4 @@ data/
 *.parquet
 *TESTAPP_README.md
 *test_app.py
+*testapp.py
